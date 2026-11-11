@@ -25,7 +25,7 @@ The headless self test runs the full pipeline (model load, live chunk, final pas
 "build/Build/Products/Debug/Meeting Notes.app/Contents/MacOS/Meeting Notes" --selftest mic.wav system.wav [--no-claude]
 ```
 
-Signing is manual (`Apple Development`, team in `project.yml`), hardened runtime on. The only SPM dependency is `argmax-oss-swift` (WhisperKit + SpeakerKit), pinned to an exact version in `project.yml`.
+Signing is manual (`Apple Development`, team in `project.yml`), hardened runtime on. `./build_release.sh` builds a Developer ID signed Release app, makes `dist/MeetingNotes-<version>.dmg`, notarizes (keychain profile `ainstype-notary`, override with `NOTARY_PROFILE`) and staples. Models are not bundled. The version comes from `CFBundleShortVersionString` in `project.yml`. The only SPM dependency is `argmax-oss-swift` (WhisperKit + SpeakerKit), pinned to an exact version in `project.yml`.
 
 ## Architecture
 

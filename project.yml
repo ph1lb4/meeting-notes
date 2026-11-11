@@ -35,7 +35,7 @@ targets:
       properties:
         CFBundleName: Meeting Notes
         CFBundleDisplayName: Meeting Notes
-        CFBundleShortVersionString: "1.0"
+        CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.productivity
         NSMicrophoneUsageDescription: Meeting Notes listens to your microphone to transcribe what you say in meetings.
