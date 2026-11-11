@@ -53,8 +53,8 @@ struct Meeting: Codable, Identifiable, Hashable {
     func displayName(for speaker: String) -> String {
         if let name = speakerNames[speaker], !name.isEmpty { return name }
         switch speaker {
-        case "me": return "Me"
-        case "them": return "Them"
+        case "me": return "Mic"
+        case "them": return "Call"
         default:
             if speaker.hasPrefix("s"), let n = Int(speaker.dropFirst()) { return "Speaker \(n)" }
             return speaker
@@ -70,6 +70,16 @@ struct Meeting: Codable, Identifiable, Hashable {
             keys.append(s.speaker)
         }
         return keys
+    }
+
+    /// Fixes a diarization split: every line of `key` now belongs to `target`.
+    /// The name of `key` is dropped, `target` keeps its own.
+    mutating func mergeSpeaker(_ key: String, into target: String) {
+        guard key != target else { return }
+        for i in segments.indices where segments[i].speaker == key {
+            segments[i].speaker = target
+        }
+        speakerNames[key] = nil
     }
 
     /// Transcript entries and notes merged by time.

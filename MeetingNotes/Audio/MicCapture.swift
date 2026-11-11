@@ -1,6 +1,7 @@
 import AVFoundation
+import AudioToolbox
 
-/// Captures the default microphone. Echo of call audio played through speakers is removed
+/// Captures the microphone chosen in Settings (or the system default if none is set or it is missing). Echo of call audio played through speakers is removed
 /// later in the final pass (`removeEcho`), not here.
 /// Restarts itself when the audio configuration changes (AirPods connect, input device switch).
 final class MicCapture {
@@ -58,6 +59,7 @@ final class MicCapture {
     /// Runs on `queue`.
     private func startEngine() throws {
         let input = engine.inputNode
+        selectDevice(on: input)
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw MicError.noInput }
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
@@ -67,6 +69,22 @@ final class MicCapture {
         }
         engine.prepare()
         try engine.start()
+    }
+
+    /// Points the input node at the chosen device. Falls back to the system default when the
+    /// device is not connected. Runs on `queue` while the engine is stopped.
+    private func selectDevice(on input: AVAudioInputNode) {
+        let uid = Prefs.micDeviceUID
+        guard !uid.isEmpty else { return }
+        guard var deviceID = AudioInputDevices.deviceID(forUID: uid) else {
+            NSLog("Selected mic \(uid) not connected, using system default")
+            return
+        }
+        guard let unit = input.audioUnit else { return }
+        let status = AudioUnitSetProperty(
+            unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+            &deviceID, UInt32(MemoryLayout<AudioDeviceID>.size))
+        if status != noErr { NSLog("Could not select mic \(uid): \(status)") }
     }
 
     /// Runs on `queue`. The format can be invalid for a moment while the device switches, so retry.

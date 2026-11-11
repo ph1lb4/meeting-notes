@@ -49,15 +49,81 @@ enum ClaudeRunner {
         let pipe = Pipe()
         p.standardOutput = pipe
         p.standardError = FileHandle.nullDevice
+        if (try? p.run()) != nil {
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            // `command -v` prints alias or function text for non-binaries. Only trust an absolute executable path.
+            let hit = (String(data: data, encoding: .utf8) ?? "")
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .last { $0.hasPrefix("/") && isExecutable($0) }
+            if let hit { return hit }
+        }
+
+        return desktopAppClaude()
+    }
+
+    static let desktopAppFolder = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/Claude/claude-code", isDirectory: true)
+
+    /// Last resort: the copy of Claude Code that the Claude desktop app keeps for itself.
+    /// The layout (`<version>/<hash>/claude.app`) is private and can change with any app update,
+    /// so this is only used when no regular install was found.
+    static func desktopAppClaude() -> String? {
+        let fm = FileManager.default
+        guard let versions = try? fm.contentsOfDirectory(atPath: desktopAppFolder.path) else { return nil }
+        let sorted = versions.sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+        for version in sorted {
+            let versionDir = desktopAppFolder.appendingPathComponent(version)
+            guard let builds = try? fm.contentsOfDirectory(at: versionDir, includingPropertiesForKeys: [.contentModificationDateKey]) else { continue }
+            let newestFirst = builds.sorted {
+                let a = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                let b = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                return a > b
+            }
+            for build in newestFirst {
+                let binary = build.appendingPathComponent("claude.app/Contents/MacOS/claude").path
+                if isExecutable(binary) { return binary }
+            }
+        }
+        return nil
+    }
+
+    static func isDesktopAppCopy(_ path: String) -> Bool {
+        path.hasPrefix(desktopAppFolder.path)
+    }
+
+    /// `claude --version`, e.g. "2.1.321". Nil if it does not answer within a few seconds.
+    static func version(at path: String) -> String? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = ["--version"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
         guard (try? p.run()) != nil else { return nil }
+        let deadline = DispatchTime.now() + 5
+        DispatchQueue.global().asyncAfter(deadline: deadline) { if p.isRunning { p.terminate() } }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
-        // `command -v` prints alias or function text for non-binaries. Only trust an absolute executable path.
-        return (String(data: data, encoding: .utf8) ?? "")
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .last { $0.hasPrefix("/") && isExecutable($0) }
+        guard p.terminationStatus == 0 else { return nil }
+        let line = (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return line.split(separator: " ").first.map(String.init)
     }
+
+    /// Sends a tiny prompt to check that the CLI runs and is logged in. Returns the model's answer.
+    static func test(at path: String) async throws -> String {
+        var args = ["-p", "--output-format", "text", "--tools", "", "--no-session-persistence",
+                    "--strict-mcp-config", "--setting-sources", ""]
+        let model = Prefs.claudeModel.trimmingCharacters(in: .whitespaces)
+        if !model.isEmpty { args += ["--model", model] }
+        let text = try await runProcess(path, args: args, stdin: "Reply with the single word OK.",
+                                        cwd: FileManager.default.temporaryDirectory, timeout: 60)
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static let installCommand = "curl -fsSL https://claude.ai/install.sh | bash"
+    static let installGuideURL = URL(string: "https://docs.anthropic.com/en/docs/claude-code/setup")!
 
     static let systemPrompt = """
     You turn meeting transcripts into clear meeting notes. You never invent facts. \
@@ -123,8 +189,9 @@ enum ClaudeRunner {
 
     /// `workingDirectory` is kept for API compatibility. The CLI runs in a neutral temp folder so no
     /// project CLAUDE.md or settings near the meeting folder can influence it.
-    static func run(for meeting: Meeting, workingDirectory: URL, timeout: TimeInterval = defaultTimeout) async throws -> Output {
-        guard let claude = findClaude() else { throw RunError.notFound }
+    static func run(for meeting: Meeting, workingDirectory: URL, claudePath: String? = nil,
+                    timeout: TimeInterval = defaultTimeout) async throws -> Output {
+        guard let claude = claudePath ?? findClaude() else { throw RunError.notFound }
 
         // --setting-sources "" skips user, project and local settings (and their hooks) but keeps OAuth login.
         var args = ["-p", "--output-format", "text", "--tools", "", "--no-session-persistence",

@@ -9,8 +9,18 @@ struct TranscriptView: View {
         let entries = meeting.timeline
         let speakers = meeting.speakerKeys
         VStack(spacing: 0) {
-            if !speakers.isEmpty {
-                SpeakerBar(meeting: meeting, keys: speakers)
+            if !speakers.isEmpty || !entries.isEmpty {
+                HStack(spacing: 0) {
+                    SpeakerBar(meeting: meeting, keys: speakers)
+                    Spacer(minLength: 0)
+                    if !meeting.segments.isEmpty {
+                        PageActionButton(title: "Copy", systemImage: "doc.on.doc",
+                                         help: "Copy the transcript as Markdown (pastes cleanly into Notion)") {
+                            state.copyToClipboard(MarkdownExporter.transcript(for: meeting))
+                        }
+                        .padding(.trailing, 20)
+                    }
+                }
                 Divider()
             }
             if entries.isEmpty {
@@ -29,7 +39,9 @@ struct TranscriptView: View {
                             }
                             Color.clear.frame(height: 1).id("bottom")
                         }
-                        .padding(20)
+                        .padding(24)
+                        .frame(maxWidth: 760, alignment: .leading)
+                        .frame(maxWidth: .infinity)
                         .textSelection(.enabled)
                     }
                     .onChange(of: entries.count) {
@@ -96,7 +108,9 @@ struct SpeakerBar: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Text("Speakers").font(.caption).foregroundStyle(.secondary)
+                if !keys.isEmpty {
+                    Text("Speakers").font(.caption).foregroundStyle(.secondary)
+                }
                 ForEach(keys, id: \.self) { key in
                     SpeakerChip(meeting: meeting, key: key)
                 }
@@ -113,6 +127,11 @@ struct SpeakerChip: View {
     let key: String
     @State private var editing = false
     @State private var name = ""
+
+    /// Lines can only move to another speaker once the final pass is done.
+    private var canMerge: Bool {
+        state.recordingID != meeting.id && state.finalizing[meeting.id] == nil
+    }
 
     var body: some View {
         Button {
@@ -134,9 +153,20 @@ struct SpeakerChip: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Name for \(meeting.displayName(for: key))").font(.headline)
                 TextField("e.g. Anna", text: $name)
-                    .frame(width: 200)
+                    .frame(width: 220)
                     .onSubmit(save)
                 HStack {
+                    let others = meeting.speakerKeys.filter { $0 != key }
+                    if canMerge && !others.isEmpty {
+                        Menu("Same as…") {
+                            ForEach(others, id: \.self) { other in
+                                Button(meeting.displayName(for: other)) { merge(into: other) }
+                            }
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .help("Wrong split? Move all lines of this speaker to another one.")
+                    }
                     Spacer()
                     Button("Save", action: save).keyboardShortcut(.defaultAction)
                 }
@@ -148,5 +178,10 @@ struct SpeakerChip: View {
     private func save() {
         state.renameSpeaker(key, to: name, in: meeting.id)
         editing = false
+    }
+
+    private func merge(into other: String) {
+        editing = false
+        state.mergeSpeaker(key, into: other, in: meeting.id)
     }
 }

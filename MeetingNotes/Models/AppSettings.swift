@@ -13,6 +13,26 @@ enum TranscriptionLanguage: String, CaseIterable, Identifiable {
     }
 }
 
+/// Which engine the user wants for summaries.
+enum SummaryEngineChoice: String, CaseIterable, Identifiable {
+    case auto, claude, apple
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .auto: return "Automatic"
+        case .claude: return "Claude only"
+        case .apple: return "Apple Intelligence only"
+        }
+    }
+    var detail: String {
+        switch self {
+        case .auto: return "Uses Claude when Claude Code is installed, otherwise Apple Intelligence on this Mac."
+        case .claude: return "Best summaries. The transcript is sent to Anthropic."
+        case .apple: return "Runs fully on this Mac. Shorter, simpler summaries."
+        }
+    }
+}
+
 struct WhisperModelOption: Identifiable, Hashable {
     let id: String
     let label: String
@@ -38,6 +58,9 @@ enum Prefs {
         static let claudePath = "claudePath"
         static let claudeModel = "claudeModel"
         static let captureSystemAudio = "captureSystemAudio"
+        static let summaryEngine = "summaryEngine"
+        /// Core Audio UID of the chosen microphone. Empty means system default.
+        static let micDeviceUID = "micDeviceUID"
     }
 
     static func registerDefaults() {
@@ -49,6 +72,8 @@ enum Prefs {
             Key.claudePath: "",
             Key.claudeModel: "",
             Key.captureSystemAudio: true,
+            Key.summaryEngine: SummaryEngineChoice.auto.rawValue,
+            Key.micDeviceUID: "",
         ])
     }
 
@@ -59,8 +84,20 @@ enum Prefs {
     static var keepAudio: Bool { defaults.bool(forKey: Key.keepAudio) }
     static var autoSummarize: Bool { defaults.bool(forKey: Key.autoSummarize) }
     static var captureSystemAudio: Bool { defaults.bool(forKey: Key.captureSystemAudio) }
+    static var micDeviceUID: String { defaults.string(forKey: Key.micDeviceUID) ?? "" }
     static var claudePath: String { defaults.string(forKey: Key.claudePath) ?? "" }
     static var claudeModel: String { defaults.string(forKey: Key.claudeModel) ?? "" }
+    static var summaryEngine: SummaryEngineChoice {
+        SummaryEngineChoice(rawValue: defaults.string(forKey: Key.summaryEngine) ?? "") ?? .auto
+    }
+
+    static func whisperModelFolder(_ id: String) -> URL {
+        modelsFolder.appendingPathComponent("models/argmaxinc/whisperkit-coreml/\(id)", isDirectory: true)
+    }
+
+    static func isWhisperModelDownloaded(_ id: String) -> Bool {
+        FileManager.default.fileExists(atPath: whisperModelFolder(id).appendingPathComponent("config.json").path)
+    }
 
     static var notesFolder: URL {
         if let path = defaults.string(forKey: Key.notesFolder), !path.isEmpty {

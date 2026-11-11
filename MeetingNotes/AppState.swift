@@ -42,6 +42,16 @@ final class AppState {
     var modelStatus: ModelStatus = .idle
     var finalizing: [UUID: String] = [:]
     var summarizing: Set<UUID> = []
+    /// Engine of each running summary, for the progress text.
+    var summaryEngines: [UUID: SummaryEngine] = [:]
+    /// Claude CLI found by the last check, nil if none.
+    var claudeCLI: String?
+    var appleIntelligence: AppleSummarizer.Status = .unsupportedOS
+    var engineChoice: SummaryEngineChoice = .auto
+    /// `claude --version` of the found CLI.
+    var claudeVersion: String?
+    /// False until the first engine check is done, so the UI does not flash "not found".
+    var enginesChecked = false
     var errorMessage: String?
     var warningMessage: String?
 
@@ -93,6 +103,17 @@ final class AppState {
 
     var isRecording: Bool { recordingID != nil }
 
+    /// What would write the next summary, based on the engine setting and what is installed.
+    var availableEngine: SummaryEngine? {
+        let claude = claudeCLI != nil
+        let apple = appleIntelligence == .available
+        switch engineChoice {
+        case .auto: return claude ? .claude : (apple ? .apple : nil)
+        case .claude: return claude ? .claude : nil
+        case .apple: return apple ? .apple : nil
+        }
+    }
+
     /// True while a meeting is recording, finalizing or being summarized.
     var isBusy: Bool { recordingID != nil || !finalizing.isEmpty || !summarizing.isEmpty }
 
@@ -100,6 +121,7 @@ final class AppState {
         Prefs.registerDefaults()
         prepareModel()
         reload()
+        Task { await refreshSummaryEngines() }
     }
 
     // MARK: - Loading
@@ -434,7 +456,7 @@ final class AppState {
         } else {
             flushSave(id)
         }
-        if Prefs.autoSummarize && !current.segments.isEmpty { summarize(id) }
+        if Prefs.autoSummarize && !current.segments.isEmpty { summarize(id, auto: true) }
     }
 
     func hasAudio(_ meeting: Meeting) -> Bool {
@@ -450,16 +472,52 @@ final class AppState {
 
     // MARK: - Summary
 
-    func summarize(_ id: UUID) {
+    /// Looks for the Claude CLI (off the main thread) and checks Apple Intelligence.
+    func refreshSummaryEngines() async {
+        let (path, version) = await Task.detached(priority: .utility) { () -> (String?, String?) in
+            let path = ClaudeRunner.findClaude()
+            return (path, path.flatMap(ClaudeRunner.version(at:)))
+        }.value
+        claudeCLI = path
+        claudeVersion = version
+        appleIntelligence = AppleSummarizer.status
+        engineChoice = Prefs.summaryEngine
+        enginesChecked = true
+    }
+
+    var noEngineText: String {
+        switch engineChoice {
+        case .auto: return "No summary engine found. Install Claude Code or turn on Apple Intelligence. Settings shows how."
+        case .claude: return "Claude Code was not found. Install it or pick another engine in Settings."
+        case .apple: return "Apple Intelligence is not available. \(appleIntelligence.message)"
+        }
+    }
+
+    /// `auto` is the run after a final pass. Without any engine it does nothing; the summary tab shows how to set one up.
+    func summarize(_ id: UUID, auto: Bool = false) {
         guard let m = meeting(id), !summarizing.contains(id) else { return }
         summarizing.insert(id)
         summaryTasks[id] = Task {
             defer {
                 summarizing.remove(id)
+                summaryEngines[id] = nil
                 summaryTasks[id] = nil
             }
+            await refreshSummaryEngines()
+            guard !Task.isCancelled else { return }
+            guard let engine = availableEngine else {
+                if !auto { errorMessage = noEngineText }
+                return
+            }
+            summaryEngines[id] = engine
             do {
-                let out = try await ClaudeRunner.run(for: m, workingDirectory: MeetingStore.folder(for: m))
+                let out: ClaudeRunner.Output
+                switch engine {
+                case .claude:
+                    out = try await ClaudeRunner.run(for: m, workingDirectory: MeetingStore.folder(for: m), claudePath: claudeCLI)
+                case .apple:
+                    out = try await AppleSummarizer.run(for: m)
+                }
                 try Task.checkCancellation()
                 guard let before = meeting(id) else { return }
                 if let title = out.title, !before.titleEdited, recordingID != id, finalizing[id] == nil, title != before.title {
@@ -470,12 +528,12 @@ final class AppState {
                 }
                 guard var current = meeting(id) else { return }
                 let dir = MeetingStore.folder(for: current)
-                let summary = "# \(current.title)\n\n\(MarkdownExporter.header(for: current))\n\n" + out.summary + "\n"
-                let actions = "# Action items: \(current.title)\n\n" + out.actionItems + "\n"
+                // Action items live in the summary page, so they go into summary.md.
+                let summary = "# \(current.title)\n\n\(MarkdownExporter.header(for: current))\n\n" + out.summary
+                    + "\n\n## Action items\n\n" + out.actionItems + "\n"
                 do {
                     try ioQueue.sync {
                         try MeetingStore.write(summary, to: dir.appendingPathComponent(MeetingStore.summaryName))
-                        try MeetingStore.write(actions, to: dir.appendingPathComponent(MeetingStore.actionItemsName))
                     }
                 } catch {
                     errorMessage = Self.saveFailureText(dir)
@@ -629,6 +687,13 @@ final class AppState {
     func renameSpeaker(_ key: String, to name: String, in id: UUID) {
         guard var m = meeting(id) else { return }
         m.speakerNames[key] = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        update(m)
+    }
+
+    /// Not while recording or finalizing: live chunks keep adding lines and the final pass replaces them.
+    func mergeSpeaker(_ key: String, into target: String, in id: UUID) {
+        guard recordingID != id, finalizing[id] == nil, var m = meeting(id) else { return }
+        m.mergeSpeaker(key, into: target)
         update(m)
     }
 

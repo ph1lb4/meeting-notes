@@ -6,7 +6,6 @@ enum MeetingStore {
     static let jsonName = "meeting.json"
     static let transcriptName = "transcript.md"
     static let summaryName = "summary.md"
-    static let actionItemsName = "action-items.md"
     static let audioFolderName = "audio"
     static let micFileName = "mic.caf"
     static let systemFileName = "system.caf"

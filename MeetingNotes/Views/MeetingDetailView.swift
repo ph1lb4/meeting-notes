@@ -5,19 +5,18 @@ struct MeetingDetailView: View {
     let meetingID: UUID
 
     enum Tab: String, CaseIterable, Identifiable {
-        case transcript = "Transcript"
         case summary = "Summary"
-        case actions = "Action Items"
+        case transcript = "Transcript"
         var id: String { rawValue }
     }
 
-    @State private var tab: Tab = .transcript
+    @State private var tab: Tab = .summary
     @State private var title = ""
-    @State private var noteText = ""
-    @FocusState private var noteFocused: Bool
 
     private var meeting: Meeting? { state.meeting(meetingID) }
     private var isRecording: Bool { state.recordingID == meetingID }
+    /// Recording or running the final pass. The transcript tab is the default while this is true.
+    private var isTranscribing: Bool { isRecording || state.finalizing[meetingID] != nil }
 
     var body: some View {
         if let meeting {
@@ -25,15 +24,16 @@ struct MeetingDetailView: View {
                 header(meeting)
                 Divider()
                 switch tab {
+                case .summary: SummaryPage(meeting: meeting)
                 case .transcript: TranscriptView(meeting: meeting, autoScroll: isRecording)
-                case .summary: GeneratedTextView(meeting: meeting, file: MeetingStore.summaryName)
-                case .actions: GeneratedTextView(meeting: meeting, file: MeetingStore.actionItemsName)
                 }
-                if tab == .transcript { noteBar }
             }
-            .onAppear { title = meeting.title }
+            .onAppear {
+                title = meeting.title
+                tab = isTranscribing ? .transcript : .summary
+            }
             .onChange(of: meeting.title) { _, new in title = new }
-            .toolbar { toolbar(meeting) }
+            .onChange(of: isTranscribing) { _, now in tab = now ? .transcript : .summary }
         }
     }
 
@@ -54,7 +54,7 @@ struct MeetingDetailView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 300)
+                .fixedSize()
             }
         }
         .padding(.horizontal, 20)
@@ -74,9 +74,7 @@ struct MeetingDetailView: View {
         } else if state.summarizing.contains(meetingID) {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Claude is writing the summary…")
-                Button("Cancel") { state.cancelSummary(meetingID) }
-                    .controlSize(.small)
+                Text(state.summaryEngines[meetingID].map { "\($0.label) is writing the summary…" } ?? "Writing the summary…")
             }
             .font(.callout).foregroundStyle(.secondary)
         } else {
@@ -84,67 +82,195 @@ struct MeetingDetailView: View {
                 .font(.callout).foregroundStyle(.secondary)
         }
     }
+}
 
-    // MARK: - Notes
+/// Small borderless button used for the per-page actions (copy, run Claude).
+struct PageActionButton: View {
+    let title: String
+    let systemImage: String
+    var help: String = ""
+    let action: () -> Void
 
-    private var noteBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "note.text").foregroundStyle(.secondary)
-            TextField(isRecording ? "Add a note, press Enter. Claude uses these for the summary." : "Add a note…", text: $noteText)
-                .textFieldStyle(.plain)
-                .focused($noteFocused)
-                .onSubmit {
-                    state.addNote(noteText, to: meetingID)
-                    noteText = ""
-                    noteFocused = true
-                }
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(.bar)
-        .overlay(alignment: .top) { Divider() }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .help(help)
+    }
+}
+
+/// Summary tab: Claude's summary with its actions, then the user's notes.
+/// The summary file is loaded into state, not read in `body`.
+struct SummaryPage: View {
+    @Environment(AppState.self) private var state
+    let meeting: Meeting
+
+    @State private var text: String?
+    @State private var loaded = false
+
+    private struct LoadKey: Hashable {
+        var id: UUID
+        var folder: String
+        var hasSummary: Bool
+        var revision: Int
     }
 
-    // MARK: - Toolbar
+    private var busy: Bool { state.recordingID == meeting.id || state.finalizing[meeting.id] != nil }
+    private var summarizing: Bool { state.summarizing.contains(meeting.id) }
 
-    @ToolbarContentBuilder
-    private func toolbar(_ meeting: Meeting) -> some ToolbarContent {
-        ToolbarItemGroup {
-            Button {
-                state.copyToClipboard(currentMarkdown(meeting))
-            } label: {
-                Label("Copy Markdown", systemImage: "doc.on.doc")
-            }
-            .help("Copy this tab as Markdown (pastes cleanly into Notion)")
-
-            Button {
-                state.summarize(meetingID)
-            } label: {
-                Label(meeting.hasSummary ? "Regenerate Summary" : "Summarize", systemImage: "sparkles")
-            }
-            .help(meeting.hasSummary ? "Run Claude again" : "Create summary and action items with Claude")
-            .disabled(isRecording || state.finalizing[meetingID] != nil || state.summarizing.contains(meetingID) || meeting.segments.isEmpty)
-
-            Menu {
-                Button("Show in Finder") { state.revealInFinder(meetingID) }
-                if state.hasAudio(meeting) {
-                    Button("Transcribe Again from Audio") { state.retranscribe(meetingID) }
-                        .disabled(isRecording || state.finalizing[meetingID] != nil)
+    var body: some View {
+        VStack(spacing: 0) {
+            actionBar
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    summaryContent
+                    Divider()
+                    NotesSection(meeting: meeting)
                 }
-                Divider()
-                Button("Delete Meeting", role: .destructive) { state.delete(meetingID) }
-                    .disabled(isRecording)
-            } label: {
-                Label("More", systemImage: "ellipsis.circle")
+                .padding(24)
+                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .task(id: LoadKey(id: meeting.id, folder: meeting.folderName,
+                          hasSummary: meeting.hasSummary, revision: meeting.summaryRevision)) {
+            guard meeting.hasSummary else {
+                text = nil
+                loaded = true
+                return
+            }
+            let url = MeetingStore.folder(for: meeting).appendingPathComponent(MeetingStore.summaryName)
+            let content = await Task.detached { try? String(contentsOf: url, encoding: .utf8) }.value
+            guard !Task.isCancelled else { return }
+            text = content
+            loaded = true
+        }
+    }
+
+    private var actionBar: some View {
+        HStack(spacing: 14) {
+            Spacer()
+            if let text, !summarizing {
+                PageActionButton(title: "Copy", systemImage: "doc.on.doc",
+                                 help: "Copy the summary as Markdown (pastes cleanly into Notion)") {
+                    state.copyToClipboard(text)
+                }
+            }
+            if summarizing {
+                PageActionButton(title: "Cancel", systemImage: "xmark.circle") { state.cancelSummary(meeting.id) }
+            } else if meeting.hasSummary {
+                PageActionButton(title: "Summarize Again", systemImage: "sparkles",
+                                 help: "Write the summary again with \(state.availableEngine?.label ?? "the summary engine")") {
+                    state.summarize(meeting.id)
+                }
+                .disabled(busy || meeting.segments.isEmpty)
             }
         }
     }
 
-    private func currentMarkdown(_ meeting: Meeting) -> String {
-        switch tab {
-        case .transcript: return MarkdownExporter.transcript(for: meeting)
-        case .summary: return MeetingStore.read(MeetingStore.summaryName, of: meeting) ?? ""
-        case .actions: return MeetingStore.read(MeetingStore.actionItemsName, of: meeting) ?? ""
+    @ViewBuilder
+    private var summaryContent: some View {
+        if summarizing {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text("\(state.summaryEngines[meeting.id]?.label ?? "The summary engine") is reading the transcript and your notes…")
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 120)
+        } else if let text {
+            MarkdownView(markdown: text)
+        } else if meeting.hasSummary && !loaded {
+            // File is still loading. Stay blank so the empty state does not flash.
+            Color.clear.frame(height: 120)
+        } else if state.enginesChecked && state.availableEngine == nil {
+            NoSummaryEngineView()
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "sparkles").font(.system(size: 32)).foregroundStyle(.secondary)
+                Text(busy
+                     ? "The summary is created once the transcript is finished."
+                     : "Create a summary and action items with \(state.availableEngine?.label ?? "Claude").")
+                    .foregroundStyle(.secondary)
+                Button("Create Summary") { state.summarize(meeting.id) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(busy || meeting.segments.isEmpty)
+            }
+            .frame(maxWidth: .infinity, minHeight: 160)
+        }
+    }
+}
+
+/// Shown instead of "Create Summary" when neither Claude Code nor Apple Intelligence can be used.
+struct NoSummaryEngineView: View {
+    @Environment(AppState.self) private var state
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "sparkles").font(.system(size: 32)).foregroundStyle(.secondary)
+            Text("No summary yet").font(.headline)
+            Text(state.noEngineText)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 420)
+            HStack {
+                SettingsLink { Text("Open Settings") }
+                Button("Check Again") { Task { await state.refreshSummaryEngines() } }
+            }
+            Text("Your transcript is ready either way.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 160)
+    }
+}
+
+/// The user's own notes. They are used when the summary is written.
+struct NotesSection: View {
+    @Environment(AppState.self) private var state
+    let meeting: Meeting
+
+    @State private var noteText = ""
+    @FocusState private var noteFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Notes").font(.title3.weight(.semibold))
+            ForEach(meeting.notes) { note in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(note.time.timestamp)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 44, alignment: .trailing)
+                    Text(note.text).textSelection(.enabled)
+                    Spacer(minLength: 0)
+                    Button {
+                        state.deleteNote(note.id, from: meeting.id)
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.tertiary)
+                    .help("Delete note")
+                }
+            }
+            HStack(spacing: 10) {
+                Image(systemName: "plus")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, alignment: .trailing)
+                TextField(state.recordingID == meeting.id
+                          ? "Add a note, press Enter. The summary uses these."
+                          : "Add a note…", text: $noteText)
+                    .textFieldStyle(.plain)
+                    .focused($noteFocused)
+                    .onSubmit {
+                        state.addNote(noteText, to: meeting.id)
+                        noteText = ""
+                        noteFocused = true
+                    }
+            }
         }
     }
 }
@@ -162,74 +288,6 @@ struct RecordingStatusView: View {
             LevelMeter(label: "Call", level: state.meters.systemLevel)
         }
         .font(.callout)
-    }
-}
-
-/// Summary or action items tab. The file is loaded into state, not read in `body`.
-struct GeneratedTextView: View {
-    @Environment(AppState.self) private var state
-    let meeting: Meeting
-    let file: String
-
-    @State private var text: String?
-    @State private var loaded = false
-
-    private struct LoadKey: Hashable {
-        var id: UUID
-        var file: String
-        var folder: String
-        var hasSummary: Bool
-        var revision: Int
-    }
-
-    private var busy: Bool { state.recordingID == meeting.id || state.finalizing[meeting.id] != nil }
-
-    var body: some View {
-        Group {
-            if state.summarizing.contains(meeting.id) {
-                VStack(spacing: 10) {
-                    ProgressView()
-                    Text("Claude is reading the transcript and your notes…").foregroundStyle(.secondary)
-                    Button("Cancel") { state.cancelSummary(meeting.id) }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let text {
-                ScrollView {
-                    MarkdownView(markdown: text)
-                        .padding(24)
-                        .frame(maxWidth: 760, alignment: .leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            } else if meeting.hasSummary && !loaded {
-                // File is still loading. Stay blank so the empty state does not flash.
-                Color.clear
-            } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "sparkles").font(.system(size: 36)).foregroundStyle(.secondary)
-                    Text(busy
-                         ? "The summary is created once the transcript is finished."
-                         : "Create a summary and action items with Claude.")
-                        .foregroundStyle(.secondary)
-                    Button("Create Summary") { state.summarize(meeting.id) }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(busy || meeting.segments.isEmpty)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .task(id: LoadKey(id: meeting.id, file: file, folder: meeting.folderName,
-                          hasSummary: meeting.hasSummary, revision: meeting.summaryRevision)) {
-            guard meeting.hasSummary else {
-                text = nil
-                loaded = true
-                return
-            }
-            let url = MeetingStore.folder(for: meeting).appendingPathComponent(file)
-            let content = await Task.detached { try? String(contentsOf: url, encoding: .utf8) }.value
-            guard !Task.isCancelled else { return }
-            text = content
-            loaded = true
-        }
     }
 }
 

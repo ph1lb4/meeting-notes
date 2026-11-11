@@ -169,15 +169,28 @@ private func seg(_ start: Double, _ end: Double, _ speaker: String, _ text: Stri
         m.speakerNames = ["s2": "Anna", "me": ""]
         #expect(m.speakerKeys == ["s2", "me", "them"])
         #expect(m.displayName(for: "s2") == "Anna")
-        #expect(m.displayName(for: "me") == "Me")
+        #expect(m.displayName(for: "me") == "Mic")
+        #expect(m.displayName(for: "them") == "Call")
         #expect(m.displayName(for: "s3") == "Speaker 3")
         #expect(Meeting.isDiarizedKey("s1") && !Meeting.isDiarizedKey("me") && !Meeting.isDiarizedKey("them"))
+    }
+
+    @Test func mergeSpeakerMovesLinesAndDropsName() {
+        var m = Meeting(title: "T", createdAt: Date(), folderName: "f")
+        m.segments = [seg(0, 1, "s1", "a"), seg(1, 2, "s2", "b"), seg(2, 3, "s3", "c")]
+        m.speakerNames = ["s1": "Anna", "s3": "Old"]
+        m.mergeSpeaker("s3", into: "s1")
+        #expect(m.segments.map(\.speaker) == ["s1", "s2", "s1"])
+        #expect(m.speakerKeys == ["s1", "s2"])
+        #expect(m.speakerNames == ["s1": "Anna"])
+        m.mergeSpeaker("s1", into: "s1")
+        #expect(m.speakerKeys == ["s1", "s2"])
     }
 
     @Test func transcriptMergesConsecutiveSpeakerLines() {
         var m = Meeting(title: "T", createdAt: Date(), folderName: "f")
         m.segments = [seg(0, 1, "me", "One."), seg(1, 2, "me", "Two."), seg(65, 66, "s1", "Three.")]
-        #expect(MarkdownExporter.transcriptBody(for: m) == "**[00:00] Me:** One. Two.\n\n**[01:05] Speaker 1:** Three.")
+        #expect(MarkdownExporter.transcriptBody(for: m) == "**[00:00] Mic:** One. Two.\n\n**[01:05] Speaker 1:** Three.")
         #expect(3725.0.timestamp == "1:02:05")
     }
 
@@ -187,5 +200,33 @@ private func seg(_ start: Double, _ end: Double, _ speaker: String, _ text: Stri
         #expect(name.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\:?%*|\"<>")) == nil)
         #expect(name.count <= 16 + 1 + 60)
         #expect(MeetingStore.makeFolderName(date: date, title: "  ").hasSuffix(" Meeting"))
+    }
+}
+
+@Suite struct AppleSummarizerTests {
+    @Test func mergesSpeakerLines() {
+        var m = Meeting(title: "T", createdAt: Date(), folderName: "f")
+        m.segments = [seg(0, 1, "me", "Hello"), seg(1, 2, "me", "there"), seg(2, 3, "them", "Hi")]
+        let lines = AppleSummarizer.transcriptLines(for: m)
+        #expect(lines.count == 2)
+        #expect(lines[0].hasSuffix("Hello there"))
+    }
+
+    @Test func chunksStayUnderLimit() {
+        let lines = (0..<50).map { "Speaker: line number \($0) with some words" }
+            + [String(repeating: "word ", count: 400)]
+        let chunks = AppleSummarizer.chunks(lines, limit: 300)
+        #expect(chunks.count > 1)
+        #expect(chunks.allSatisfy { $0.count <= 300 })
+        #expect(chunks.joined(separator: " ").contains("line number 49"))
+    }
+
+    @Test func rendersClaudeLayout() {
+        let r = AppleSummarizer.render(overview: "We met.", keyPoints: ["A", " "], decisions: [],
+                                       openQuestions: ["Q?"],
+                                       actionItems: [.init(owner: "", task: "Send mail", due: "Friday")])
+        #expect(r.summary == "## Summary\nWe met.\n\n## Key points\n- A\n\n## Open questions\n- Q?")
+        #expect(r.actionItems == "- [ ] **Unassigned:** Send mail (Friday)")
+        #expect(AppleSummarizer.render(overview: "x", keyPoints: [], decisions: [], openQuestions: [], actionItems: []).actionItems == "No action items.")
     }
 }

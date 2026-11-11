@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainView: View {
     @Environment(AppState.self) private var state
+    @State private var pendingDelete: UUID?
 
     var body: some View {
         @Bindable var state = state
@@ -12,10 +13,31 @@ struct MainView: View {
                         .tag(m.id)
                         .contextMenu {
                             Button("Show in Finder") { state.revealInFinder(m.id) }
-                            Button("Delete", role: .destructive) { state.delete(m.id) }
+                            if state.hasAudio(m) {
+                                Button("Transcribe Again from Audio") { state.retranscribe(m.id) }
+                                    .disabled(state.recordingID == m.id || state.finalizing[m.id] != nil)
+                            }
+                            Divider()
+                            Button("Delete", role: .destructive) { pendingDelete = m.id }
                                 .disabled(state.recordingID == m.id)
                         }
                 }
+            }
+            .onDeleteCommand { askDeleteSelected() }
+            .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+                askDeleteSelected()
+                return .handled
+            }
+            .confirmationDialog(
+                "Delete \"\(pendingDelete.flatMap { state.meeting($0)?.title } ?? "meeting")\"?",
+                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let id = pendingDelete { state.delete(id) }
+                    pendingDelete = nil
+                }
+            } message: {
+                Text("The transcript, summary, notes and audio are removed.")
             }
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .safeAreaInset(edge: .bottom) { ModelStatusView().padding(10) }
@@ -42,6 +64,14 @@ struct MainView: View {
         } message: {
             Text(state.warningMessage ?? "")
         }
+    }
+}
+
+extension MainView {
+    /// Delete key in the sidebar. Recording meetings cannot be deleted.
+    private func askDeleteSelected() {
+        guard let id = state.selectedID, state.recordingID != id else { return }
+        pendingDelete = id
     }
 }
 
@@ -127,15 +157,31 @@ struct ModelStatusView: View {
 struct EmptyStateView: View {
     @Environment(AppState.self) private var state
 
+    private var summaryLine: String {
+        switch state.availableEngine {
+        case .claude: return "Claude writes the summary, so the transcript is sent to Anthropic when you summarize."
+        case .apple: return "Apple Intelligence writes the summary on this Mac."
+        case nil: return "Summaries need Claude Code or Apple Intelligence."
+        }
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "waveform.circle")
                 .font(.system(size: 56, weight: .light))
                 .foregroundStyle(.secondary)
             Text("No meeting selected").font(.title3)
-            Text("Start a recording when your call begins.\nEverything is transcribed on this Mac.\nClaude writes the summary, so the transcript is sent to Anthropic when you summarize.")
+            Text("Start a recording when your call begins.\nEverything is transcribed on this Mac.\n\(summaryLine)")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
+            if state.enginesChecked && state.availableEngine == nil {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Text("No summary engine set up yet.")
+                    SettingsLink { Text("Set Up…") }
+                }
+                .font(.callout)
+            }
             Button {
                 state.startRecording()
             } label: {
