@@ -134,7 +134,7 @@ enum ClaudeRunner {
     """
 
     /// Removes our own delimiter and marker strings from untrusted text so it cannot close a block early.
-    private static func neutralize(_ text: String) -> String {
+    static func neutralize(_ text: String) -> String {
         var t = text
         for tag in ["<user_notes>", "</user_notes>", "<transcript>", "</transcript>", "<<<"] {
             t = t.replacingOccurrences(of: tag, with: "", options: .caseInsensitive)
@@ -173,6 +173,7 @@ enum ClaudeRunner {
         Formatting rules: plain Markdown only (headings, bullets, bold, "- [ ]" to-dos). \
         No HTML, no tables, no emojis, no code blocks, no links. It will be pasted into Notion.
 
+        \(vocabularyLine)
         ---
         Meeting: \(neutralize(meeting.title))
         \(neutralize(MarkdownExporter.header(for: meeting)))
@@ -187,18 +188,30 @@ enum ClaudeRunner {
         """
     }
 
+    /// Tells Claude how the user spells names and terms. Empty when there is no vocabulary.
+    static var vocabularyLine: String {
+        let terms = Prefs.vocabularyTerms
+        guard !terms.isEmpty else { return "" }
+        return "Correct spelling of names and terms that may appear: \(neutralize(terms.joined(separator: ", ")))\n"
+    }
+
+    /// Base CLI arguments: print mode, no tools, no sessions, no user settings or MCP servers.
+    static func baseArgs(systemPrompt: String) -> [String] {
+        // --setting-sources "" skips user, project and local settings (and their hooks) but keeps OAuth login.
+        var args = ["-p", "--output-format", "text", "--tools", "", "--no-session-persistence",
+                    "--strict-mcp-config", "--setting-sources", "", "--system-prompt", systemPrompt]
+        let model = Prefs.claudeModel.trimmingCharacters(in: .whitespaces)
+        if !model.isEmpty { args += ["--model", model] }
+        return args
+    }
+
     /// `workingDirectory` is kept for API compatibility. The CLI runs in a neutral temp folder so no
     /// project CLAUDE.md or settings near the meeting folder can influence it.
     static func run(for meeting: Meeting, workingDirectory: URL, claudePath: String? = nil,
                     timeout: TimeInterval = defaultTimeout) async throws -> Output {
         guard let claude = claudePath ?? findClaude() else { throw RunError.notFound }
 
-        // --setting-sources "" skips user, project and local settings (and their hooks) but keeps OAuth login.
-        var args = ["-p", "--output-format", "text", "--tools", "", "--no-session-persistence",
-                    "--strict-mcp-config", "--setting-sources", "", "--system-prompt", systemPrompt]
-        let model = Prefs.claudeModel.trimmingCharacters(in: .whitespaces)
-        if !model.isEmpty { args += ["--model", model] }
-
+        let args = baseArgs(systemPrompt: systemPrompt)
         let input = prompt(for: meeting)
         let text = try await runProcess(claude, args: args, stdin: input,
                                         cwd: FileManager.default.temporaryDirectory, timeout: timeout)
@@ -279,7 +292,7 @@ enum ClaudeRunner {
         }
     }
 
-    private static func runProcess(_ path: String, args: [String], stdin: String, cwd: URL,
+    static func runProcess(_ path: String, args: [String], stdin: String, cwd: URL,
                                    timeout: TimeInterval) async throws -> String {
         _ = ignoreSigpipe
         let control = ProcessControl()

@@ -5,6 +5,8 @@ struct TranscriptView: View {
     let meeting: Meeting
     let autoScroll: Bool
 
+    private var busy: Bool { state.recordingID == meeting.id || state.finalizing[meeting.id] != nil }
+
     var body: some View {
         let entries = meeting.timeline
         let speakers = meeting.speakerKeys
@@ -13,6 +15,23 @@ struct TranscriptView: View {
                 HStack(spacing: 0) {
                     SpeakerBar(meeting: meeting, keys: speakers)
                     Spacer(minLength: 0)
+                    if !meeting.segments.isEmpty && !busy {
+                        if !meeting.originalTexts.isEmpty {
+                            PageActionButton(title: "Undo Fixes", systemImage: "arrow.uturn.backward",
+                                             help: "Put back the \(meeting.originalTexts.count) lines Claude changed") {
+                                state.restoreOriginalTranscript(meeting.id)
+                            }
+                            .padding(.trailing, 14)
+                        }
+                        if state.canCleanUp {
+                            PageActionButton(title: "Fix with Claude", systemImage: "wand.and.stars",
+                                             help: "Let Claude correct misheard words, names and terms") {
+                                state.cleanUpTranscript(meeting.id)
+                            }
+                            .disabled(state.summarizing.contains(meeting.id))
+                            .padding(.trailing, 14)
+                        }
+                    }
                     if !meeting.segments.isEmpty {
                         PageActionButton(title: "Copy", systemImage: "doc.on.doc",
                                          help: "Copy the transcript as Markdown (pastes cleanly into Notion)") {

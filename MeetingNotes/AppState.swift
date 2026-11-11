@@ -63,6 +63,10 @@ final class AppState {
     @ObservationIgnored private var liveContinuation: AsyncStream<LiveChunk>.Continuation?
     @ObservationIgnored private var liveTask: Task<Void, Never>?
     @ObservationIgnored private var meterTimer: Timer?
+    @ObservationIgnored private var callEndTracker = CallEndTracker()
+    @ObservationIgnored private var lastCallCheck: Double = 0
+    /// Session time of the last loud call audio frame.
+    @ObservationIgnored private var lastCallSound: Double = -.infinity
     /// True between the Record click and the start of the session (permission prompt).
     @ObservationIgnored private var starting = false
 
@@ -117,7 +121,10 @@ final class AppState {
     /// True while a meeting is recording, finalizing or being summarized.
     var isBusy: Bool { recordingID != nil || !finalizing.isEmpty || !summarizing.isEmpty }
 
-    init() {
+    /// The one instance. Launch recovery and orphan cleanup must only run once per process.
+    static let shared = AppState()
+
+    private init() {
         Prefs.registerDefaults()
         prepareModel()
         reload()
@@ -177,7 +184,9 @@ final class AppState {
         // Once per launch, and only if the notes folder was readable, remove recordings without a meeting.
         if loaded != nil, !cleanedRecordings {
             cleanedRecordings = true
-            let orphans = MeetingStore.orphanRecordings(keeping: Set(meetings.map(\.id)))
+            var keep = Set(meetings.map(\.id))
+            if let recordingID { keep.insert(recordingID) }
+            let orphans = MeetingStore.orphanRecordings(keeping: keep)
             if !orphans.isEmpty { ioQueue.async { MeetingStore.remove(orphans) } }
         }
     }
@@ -343,15 +352,32 @@ final class AppState {
             }
         }
 
+        callEndTracker = CallEndTracker()
+        lastCallCheck = 0
+        lastCallSound = -.infinity
         let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
             // Timers on the main run loop fire on the main thread.
             MainActor.assumeIsolated {
                 guard let self, let s = self.session else { return }
                 self.meters.set(elapsed: s.duration, mic: s.micLevel, system: s.systemLevel)
+                self.checkCallEnded(s)
             }
         }
         RunLoop.main.add(timer, forMode: .common)
         meterTimer = timer
+    }
+
+    /// Stops the recording once the call app released the mic and the call is quiet (see `CallEndTracker`).
+    private func checkCallEnded(_ s: RecordingSession) {
+        let now = s.duration
+        if s.systemLevel > 0.004 { lastCallSound = now }
+        guard now - lastCallCheck >= 1 else { return }
+        lastCallCheck = now
+        guard Prefs.autoStopOnCallEnd else { return }
+        let ended = callEndTracker.update(otherAppUsesMic: MicUsage.otherAppIsUsingMic(),
+                                          callAudioActive: now - lastCallSound < 2,
+                                          at: now)
+        if ended { stopRecording() }
     }
 
     func stopRecording() {
@@ -419,6 +445,7 @@ final class AppState {
                 m.segments = segments
                 // s1, s2, ... are assigned fresh on every pass, so old names could land on the wrong person.
                 m.speakerNames = m.speakerNames.filter { !Meeting.isDiarizedKey($0.key) }
+                m.originalTexts = [:]
                 if m.duration == 0, let last = segments.last { m.duration = last.end }
                 update(m)
             }
@@ -427,6 +454,10 @@ final class AppState {
             if meeting(id) != nil {
                 errorMessage = "Final transcription failed, keeping the live transcript. The audio is kept so you can try again from the More menu. \(error.localizedDescription)"
             }
+        }
+        if !failed, Prefs.cleanupTranscript, canCleanUp {
+            finalizing[id] = "Claude is fixing misheard words…"
+            await runCleanup(id, manual: false)
         }
         finalizing[id] = nil
         defer { scheduleIdleUnload() }
@@ -468,6 +499,54 @@ final class AppState {
         guard let m = meeting(id), recordingID != id, finalizing[id] == nil,
               let folder = MeetingStore.audioSource(for: m) else { return }
         startFinalPass(id, input: Self.finalInput(in: folder))
+    }
+
+    // MARK: - Transcript cleanup
+
+    /// Cleanup needs the Claude CLI. With "Apple Intelligence only" nothing is sent to Anthropic.
+    var canCleanUp: Bool { claudeCLI != nil && engineChoice != .apple }
+
+    /// Lets Claude fix misheard words in a finished transcript. Uses the finalizing status, which blocks edits meanwhile.
+    func cleanUpTranscript(_ id: UUID) {
+        guard let m = meeting(id), !m.segments.isEmpty, recordingID != id, finalizing[id] == nil,
+              !summarizing.contains(id) else { return }
+        finalizing[id] = "Claude is fixing misheard words…"
+        Task {
+            await refreshSummaryEngines()
+            if canCleanUp {
+                await runCleanup(id, manual: true)
+            } else {
+                errorMessage = "Fixing the transcript needs Claude Code. Install it or pick another engine in Settings."
+            }
+            finalizing[id] = nil
+        }
+    }
+
+    private func runCleanup(_ id: UUID, manual: Bool) async {
+        guard let claude = claudeCLI, let m = meeting(id), !m.segments.isEmpty else { return }
+        do {
+            let fixes = try await TranscriptCleaner.run(for: m, claudePath: claude)
+            guard var current = meeting(id) else { return }
+            // Segments are locked while finalizing, but match by id in case they changed anyway.
+            guard current.segments.map(\.id) == m.segments.map(\.id) else { return }
+            let result = TranscriptCleaner.apply(fixes, to: current.segments)
+            guard !result.originals.isEmpty else { return }
+            current.segments = result.segments
+            current.originalTexts.merge(result.originals) { old, _ in old }
+            update(current)
+            flushSave(id)
+        } catch {
+            NSLog("Transcript cleanup failed: \(error)")
+            if manual, meeting(id) != nil { errorMessage = error.localizedDescription }
+        }
+    }
+
+    /// Undoes Claude's fixes.
+    func restoreOriginalTranscript(_ id: UUID) {
+        guard var m = meeting(id), !m.originalTexts.isEmpty, recordingID != id, finalizing[id] == nil else { return }
+        m.restoreOriginalTexts()
+        update(m)
+        flushSave(id)
     }
 
     // MARK: - Summary

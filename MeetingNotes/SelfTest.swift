@@ -32,6 +32,16 @@ enum SelfTest {
                 meeting.notes = [MeetingNote(time: 5, text: "Budget is the main topic")]
                 print(MarkdownExporter.transcript(for: meeting))
 
+                if !args.contains("--no-claude"), !args.contains("--apple"), let claude = ClaudeRunner.findClaude() {
+                    let fixes = try await TranscriptCleaner.run(for: meeting, claudePath: claude)
+                    let result = TranscriptCleaner.apply(fixes, to: meeting.segments)
+                    print("cleanup: \(fixes.count) fixes returned, \(result.originals.count) applied")
+                    for (i, s) in result.segments.enumerated() where s.text != meeting.segments[i].text {
+                        print("  - \(meeting.segments[i].text)\n  + \(s.text)")
+                    }
+                    meeting.segments = result.segments
+                }
+
                 if !args.contains("--no-claude") {
                     let out = args.contains("--apple")
                         ? try await AppleSummarizer.run(for: meeting)

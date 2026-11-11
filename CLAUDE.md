@@ -13,13 +13,13 @@ xcodegen generate                      # after adding/removing files or changing
 xcodebuild -project MeetingNotes.xcodeproj -scheme MeetingNotes -configuration Debug -derivedDataPath build build
 ```
 
-Unit tests (Swift Testing, `MeetingNotesTests/`) cover the pure logic: hallucination filter, Claude output parsing, echo removal, speaker relabeling, call detection, meeting JSON and Markdown export. The test bundle has no host app. It compiles `Models/`, `Claude/` and `Transcription/` directly, so code in those folders must not depend on `AppState` or views.
+Unit tests (Swift Testing, `MeetingNotesTests/`) cover the pure logic: hallucination filter, Claude output parsing, echo removal, speaker relabeling, call detection, call end detection, language lock, transcript cleanup parsing, meeting JSON and Markdown export. The test bundle has no host app. It compiles `Models/`, `Claude/` and `Transcription/` directly, so code in those folders must not depend on `AppState` or views.
 
 ```sh
 xcodebuild -project MeetingNotes.xcodeproj -scheme MeetingNotes -derivedDataPath build test
 ```
 
-The headless self test runs the full pipeline (model load, live chunk, final pass + diarization, Claude summary) and exits 0/1:
+The headless self test runs the full pipeline (model load, live chunk, final pass + diarization, Claude cleanup and summary) and exits 0/1:
 
 ```sh
 "build/Build/Products/Debug/Meeting Notes.app/Contents/MacOS/Meeting Notes" --selftest mic.wav system.wav [--no-claude]
@@ -39,6 +39,7 @@ Signing is manual (`Apple Development`, team in `project.yml`), hardened runtime
 1. `RecordingSession` starts two tracks: `MicCapture` (plain AVAudioEngine input tap on the device from `Prefs.micDeviceUID`, falling back to the system default when it is empty or not connected; voice processing was removed because it fails to initialize on some setups, echo is handled by `removeEcho`) and `SystemAudioCapture` (Core Audio process tap + private aggregate device, captures all call audio). System audio failure is non-fatal and becomes a warning.
 2. Each `TrackRecorder` converts to 16 kHz mono (`AudioConverter16k`), writes `mic.caf` / `system.caf` into `~/Library/Application Support/MeetingNotes/Recordings/<meeting uuid>/` (never into the notes folder, which may sync to iCloud), pads silence to stay aligned with the wall clock, and runs an energy VAD that emits speech chunks.
 3. Chunks go through a bounded `AsyncStream` (newest 12) to `AppState`, which transcribes them live and appends segments with speaker `"me"` (mic) or `"them"` (system). On stop the live task is cancelled: the chunk in flight finishes, queued chunks are dropped.
+   With "Stop recording when the call ends" (`Prefs.autoStopOnCallEnd`, on by default), the meter timer checks once per second via `MicUsage` (Core Audio process list, `kAudioProcessPropertyIsRunningInput`, own PID excluded) whether another app uses the mic. `CallEndTracker` arms after another app held the mic for 10 s and stops the recording once no other app uses it and the call track is quiet for 10 s. In-person recordings never arm.
 4. On stop, `TranscriptionEngine.finalize` re-transcribes the full files with word timestamps + VAD chunking and **replaces** the live segments. If the call track has >5 s of activity, the call track is diarized and mic lines that echo call audio are dropped (`removeEcho`). Otherwise (in-person) the mic track is diarized. Raw diarization ids are relabeled `s1`, `s2`, … by first appearance. Because the ids are assigned fresh on every pass, stored names for `s…` keys are cleared when a pass replaces the segments.
 5. Then audio is deleted, or moved to the meeting folder's `audio/` with "Keep audio". If the pass failed, the audio stays in the recordings folder so "Transcribe Again" can retry. A pending title rename is applied, and `ClaudeRunner` auto-summarizes.
 
@@ -46,7 +47,11 @@ Signing is manual (`Apple Development`, team in `project.yml`), hardened runtime
 
 **Speaker keys** in `TranscriptSegment.speaker` are `me` (shown as "Mic"), `them` (shown as "Call"), `s1…sN`. Display names come from `Meeting.speakerNames` via `Meeting.displayName(for:)`. Rename by editing that map, never the segments. The only segment edit is "Same as…" in the speaker popover (`Meeting.mergeSpeaker`), which moves a wrongly split speaker's lines to another key; it is blocked while recording or finalizing.
 
-**`HallucinationFilter`** cleans every Whisper segment (live and final) using `noSpeechProb` / `avgLogprob` and known junk phrases.
+**Language lock:** with auto language, `TranscriptionEngine.trackLanguage` runs Whisper language detection on the 5 busiest 30 s windows of each track. If at least 75 % agree (`lockedLanguage`), that track is decoded in that language only. Otherwise Whisper picks per VAD chunk. Mic and call tracks are detected separately.
+
+**Transcript cleanup:** `TranscriptCleaner` (Claude CLI, batches of 250 lines) returns `number|fixed text` for changed lines only. `apply` keeps timestamps and speakers and rejects fixes that change the length too much. Originals go to `Meeting.originalTexts` (segment id -> text) for "Undo Fixes"; a new final pass clears them. It runs after the final pass while `finalizing[id]` is set (`Prefs.cleanupTranscript`, on by default), never with summary engine "Apple Intelligence only". `Prefs.vocabulary` goes to Claude for cleanup and summary. It is not a Whisper prompt: WhisperKit word timestamps break with `promptTokens` (all words land on one time), which ruins diarization.
+
+**`HallucinationFilter`** cleans every Whisper segment (live and final) using `noSpeechProb` / `avgLogprob` and known junk phrases. It also drops lines that sit on silence (100 ms RMS frames vs. the track's speech level, `dropSilent`), fillers like "Thank you." over quiet audio, and, with auto language, short final-pass chunks in a different language than the rest (`strayLanguageParts`).
 
 **Persistence** (`MeetingStore`, pure file helpers): one folder per meeting under `Prefs.notesFolder` (default `~/Documents/Meeting Notes/<date> <title>/`) with `meeting.json` (app state), `transcript.md`, `summary.md` (summary plus action items), and `audio/` (kept audio only). Meetings load off the main thread at launch (`reload()`), which never replaces meetings that are recording, finalizing or summarizing. New `Meeting` fields need a default in `Meeting.init(from:)` so old `meeting.json` files still decode.
 

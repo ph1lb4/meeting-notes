@@ -20,9 +20,10 @@ Meeting bots are awkward, cloud transcription is a privacy question, and most no
 ## Features
 
 - **Works with every call app.** Zoom, Teams, Google Meet in the browser, Slack huddles. Call audio comes from a Core Audio process tap, so there is nothing to install in the call.
-- **Local transcription.** [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) runs Whisper on the Apple Neural Engine. German and English are detected automatically.
+- **Local transcription.** [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) runs Whisper on the Apple Neural Engine. German and English are detected automatically, once per speaker track, so lines do not get translated by mistake.
 - **Speakers.** Your mic is you. The call audio is split into Speaker 1, 2, 3 with Pyannote (SpeakerKit). In-person meeting? Then the mic gets split instead. Click a speaker to rename them.
 - **Live, then clean.** Text shows up while you talk. After you hit Stop, a second, more accurate pass runs over the full recording and adds the speaker labels.
+- **Cleaner transcripts.** Claude fixes misheard words, names and terms after each meeting. Add your own vocabulary in Settings. One click undoes the fixes.
 - **Your own notes.** Type notes during the meeting. They get a timestamp and land in the transcript and the summary.
 - **Summaries.** Summary, key points, decisions, open questions and action items. Written by the [Claude Code](https://claude.com/claude-code) CLI if you have it, or by Apple Intelligence fully on device.
 - **Plain files.** Every meeting is a folder with Markdown files. No database, no account, no lock in.
@@ -34,7 +35,7 @@ Meeting bots are awkward, cloud transcription is a privacy question, and most no
 2. Drag **Meeting Notes** into Applications and open it. The app is signed and notarized.
 3. Hit **Record**. macOS asks for **Microphone** and **System Audio Recording** access once.
 
-The Whisper model (about 630 MB to 1.6 GB, you pick in Settings) and the speaker model download on first use. After that everything works offline.
+The Whisper model (about 630 MB to 3 GB, you pick in Settings) and the speaker model download on first use. After that everything works offline.
 
 For summaries, either install and log in to [Claude Code](https://claude.com/claude-code), or turn on Apple Intelligence (macOS 26+).
 
@@ -44,7 +45,7 @@ For summaries, either install and log in to [Claude Code](https://claude.com/cla
 
 - Audio, transcription and speaker detection stay on your Mac.
 - Recordings are written to `~/Library/Application Support/MeetingNotes/Recordings/`, outside any iCloud synced folder, and deleted after the final transcript unless you turn on "Keep audio".
-- With **Claude** as the summary engine, the transcript and your notes are sent to Anthropic when a summary is written. Pick **Apple Intelligence only** in Settings, or turn off auto summary, to keep everything local.
+- With **Claude** as the summary engine, the transcript and your notes are sent to Anthropic when a summary is written or the transcript is fixed. Pick **Apple Intelligence only** in Settings, or turn off auto summary, to keep everything local.
 - Call capture records all sound your Mac plays. Tell the people in the call that you are recording.
 
 ## Where your notes live

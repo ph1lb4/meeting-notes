@@ -118,13 +118,22 @@ enum MeetingStore {
         try? fm.removeItem(at: kept)
     }
 
-    /// Recordings folders whose meeting is not in `ids`.
-    static func orphanRecordings(keeping ids: Set<UUID>) -> [URL] {
+    /// Recordings folders whose meeting is not in `ids`. Folders with audio written in the last
+    /// `minAge` seconds are skipped, since something may still be recording into them.
+    static func orphanRecordings(keeping ids: Set<UUID>, minAge: TimeInterval = 3600) -> [URL] {
         let dirs = (try? fm.contentsOfDirectory(at: Prefs.recordingsFolder, includingPropertiesForKeys: nil)) ?? []
         return dirs.filter { dir in
-            guard let id = UUID(uuidString: dir.lastPathComponent) else { return false }
-            return !ids.contains(id)
+            guard let id = UUID(uuidString: dir.lastPathComponent), !ids.contains(id) else { return false }
+            return Date().timeIntervalSince(lastModified(dir)) > minAge
         }
+    }
+
+    /// Newest modification date of the folder or any file in it.
+    private static func lastModified(_ dir: URL) -> Date {
+        let files = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        return ([dir] + files).compactMap {
+            try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        }.max() ?? .distantPast
     }
 
     static func remove(_ urls: [URL]) {

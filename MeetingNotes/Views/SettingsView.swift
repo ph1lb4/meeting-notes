@@ -21,8 +21,11 @@ private struct GeneralSettings: View {
     @AppStorage(Prefs.Key.language) private var language = TranscriptionLanguage.auto.rawValue
     @AppStorage(Prefs.Key.keepAudio) private var keepAudio = false
     @AppStorage(Prefs.Key.captureSystemAudio) private var captureSystemAudio = true
+    @AppStorage(Prefs.Key.autoStopOnCallEnd) private var autoStopOnCallEnd = true
     @AppStorage(Prefs.Key.notesFolder) private var notesFolder = ""
     @AppStorage(Prefs.Key.micDeviceUID) private var micDeviceUID = ""
+    @AppStorage(Prefs.Key.vocabulary) private var vocabulary = ""
+    @AppStorage(Prefs.Key.cleanupTranscript) private var cleanupTranscript = true
     @State private var inputDevices = AudioInputDeviceList()
 
     var body: some View {
@@ -38,6 +41,17 @@ private struct GeneralSettings: View {
                 Picker("Language", selection: $language) {
                     ForEach(TranscriptionLanguage.allCases) { Text($0.label).tag($0.rawValue) }
                 }
+                if language == TranscriptionLanguage.auto.rawValue {
+                    Text("Auto finds the main language of each speaker track and sticks to it, so lines are not translated by mistake.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                TextField("Vocabulary", text: $vocabulary, prompt: Text("Names, products, terms"), axis: .vertical)
+                    .lineLimit(2...4)
+                Text("Comma separated. Claude uses it to spell names and terms right in the transcript and summary.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Fix misheard words with Claude", isOn: $cleanupTranscript)
+                Text("After each meeting, Claude corrects words, names and terms in the transcript. The transcript is sent to Anthropic, like for the summary. Off with \"Apple Intelligence only\".")
+                    .font(.caption).foregroundStyle(.secondary)
                 LabeledContent("Status") { WhisperStatusText() }
                 ModelStatusView()
                 Text("Transcription and speaker detection run on this Mac. Models are stored in Application Support.")
@@ -61,6 +75,9 @@ private struct GeneralSettings: View {
                 }
                 Toggle("Capture call audio (Zoom, Teams, Meet, …)", isOn: $captureSystemAudio)
                 Text("Call capture records all sound your Mac plays. Tell the others that you are recording.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Stop recording when the call ends", isOn: $autoStopOnCallEnd)
+                Text("Stops about 10 seconds after your call app lets go of the microphone and the call goes quiet.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Keep audio files after transcription", isOn: $keepAudio)
                 Text(keepAudio

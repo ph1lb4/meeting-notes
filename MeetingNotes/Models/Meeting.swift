@@ -44,10 +44,12 @@ struct Meeting: Codable, Identifiable, Hashable {
     var titleEdited = false
     /// Bumped each time the summary files are rewritten, so views know to reload them.
     var summaryRevision = 0
+    /// Segment id -> text before Claude's cleanup, for lines Claude changed. Lets the user undo the fixes.
+    var originalTexts: [String: String] = [:]
 
     enum CodingKeys: String, CodingKey {
         case id, title, createdAt, duration, phase, segments, notes, speakerNames, folderName
-        case hasSummary, titleEdited, summaryRevision
+        case hasSummary, titleEdited, summaryRevision, originalTexts
     }
 
     func displayName(for speaker: String) -> String {
@@ -70,6 +72,14 @@ struct Meeting: Codable, Identifiable, Hashable {
             keys.append(s.speaker)
         }
         return keys
+    }
+
+    /// Puts back the text of every line Claude's cleanup changed.
+    mutating func restoreOriginalTexts() {
+        for i in segments.indices {
+            if let text = originalTexts[segments[i].id.uuidString] { segments[i].text = text }
+        }
+        originalTexts = [:]
     }
 
     /// Fixes a diarization split: every line of `key` now belongs to `target`.
@@ -142,6 +152,7 @@ extension Meeting {
         hasSummary = try c.decodeIfPresent(Bool.self, forKey: .hasSummary) ?? false
         titleEdited = try c.decodeIfPresent(Bool.self, forKey: .titleEdited) ?? false
         summaryRevision = try c.decodeIfPresent(Int.self, forKey: .summaryRevision) ?? 0
+        originalTexts = try c.decodeIfPresent([String: String].self, forKey: .originalTexts) ?? [:]
     }
 }
 

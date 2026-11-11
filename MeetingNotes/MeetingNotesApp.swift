@@ -7,9 +7,23 @@ struct MeetingNotesApp: App {
 
     init() {
         SelfTest.runIfRequested()
-        let state = AppState()
+        Self.exitIfAlreadyRunning()
+        // SwiftUI may call App.init more than once. A second AppState would run its own launch
+        // cleanup and delete the folder of a recording that is in progress.
+        let state = AppState.shared
         _state = State(initialValue: state)
         AppDelegate.state = state
+    }
+
+    /// A second process (e.g. Debug and Release builds) would treat the other one's recording as
+    /// interrupted or orphaned and finalize or delete its audio. Hand over to the running one instead.
+    private static func exitIfAlreadyRunning() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        let me = ProcessInfo.processInfo.processIdentifier
+        guard let other = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .first(where: { $0.processIdentifier != me && !$0.isTerminated }) else { return }
+        other.activate()
+        exit(0)
     }
 
     var body: some Scene {

@@ -39,6 +39,7 @@ struct WhisperModelOption: Identifiable, Hashable {
 
     static let all: [WhisperModelOption] = [
         .init(id: "openai_whisper-large-v3-v20240930_turbo", label: "Large v3 Turbo (best, ~1.6 GB)"),
+        .init(id: "openai_whisper-large-v3", label: "Large v3 (most accurate, ~2x slower, ~3 GB)"),
         .init(id: "openai_whisper-large-v3-v20240930_626MB", label: "Large v3 Turbo compressed (~630 MB)"),
         .init(id: "openai_whisper-small", label: "Small (fast, ~480 MB)"),
         .init(id: "openai_whisper-base", label: "Base (fastest, ~150 MB)"),
@@ -61,6 +62,13 @@ enum Prefs {
         static let summaryEngine = "summaryEngine"
         /// Core Audio UID of the chosen microphone. Empty means system default.
         static let micDeviceUID = "micDeviceUID"
+        /// Stop recording when the call app releases the mic and the call audio goes quiet.
+        static let autoStopOnCallEnd = "autoStopOnCallEnd"
+        /// Names and terms, comma or line separated. Given to Claude for cleanup and summary.
+        /// Not used as a Whisper prompt: WhisperKit word timestamps break with prompt tokens.
+        static let vocabulary = "vocabulary"
+        /// After the final pass, let Claude fix misheard words in the transcript.
+        static let cleanupTranscript = "cleanupTranscript"
     }
 
     static func registerDefaults() {
@@ -74,6 +82,9 @@ enum Prefs {
             Key.captureSystemAudio: true,
             Key.summaryEngine: SummaryEngineChoice.auto.rawValue,
             Key.micDeviceUID: "",
+            Key.autoStopOnCallEnd: true,
+            Key.vocabulary: "",
+            Key.cleanupTranscript: true,
         ])
     }
 
@@ -84,6 +95,16 @@ enum Prefs {
     static var keepAudio: Bool { defaults.bool(forKey: Key.keepAudio) }
     static var autoSummarize: Bool { defaults.bool(forKey: Key.autoSummarize) }
     static var captureSystemAudio: Bool { defaults.bool(forKey: Key.captureSystemAudio) }
+    static var autoStopOnCallEnd: Bool { defaults.bool(forKey: Key.autoStopOnCallEnd) }
+    static var cleanupTranscript: Bool { defaults.bool(forKey: Key.cleanupTranscript) }
+    static var vocabulary: String { defaults.string(forKey: Key.vocabulary) ?? "" }
+    /// Vocabulary as a clean list of terms.
+    static var vocabularyTerms: [String] { vocabularyTerms(vocabulary) }
+    static func vocabularyTerms(_ raw: String) -> [String] {
+        raw.components(separatedBy: CharacterSet(charactersIn: ",;\n"))
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
     static var micDeviceUID: String { defaults.string(forKey: Key.micDeviceUID) ?? "" }
     static var claudePath: String { defaults.string(forKey: Key.claudePath) ?? "" }
     static var claudeModel: String { defaults.string(forKey: Key.claudeModel) ?? "" }

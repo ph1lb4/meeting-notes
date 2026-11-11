@@ -73,8 +73,9 @@ final class TranscriptionEngine: @unchecked Sendable {
 
     // MARK: - Options
 
-    private func options(wordTimestamps: Bool, chunked: Bool) -> DecodingOptions {
-        let language: String? = {
+    /// `language` overrides the setting, e.g. with the language detected for a whole track.
+    private func options(wordTimestamps: Bool, chunked: Bool, language forced: String? = nil) -> DecodingOptions {
+        let language: String? = forced ?? {
             switch Prefs.language {
             case .auto: return nil
             case .de: return "de"
@@ -95,6 +96,51 @@ final class TranscriptionEngine: @unchecked Sendable {
         )
     }
 
+    // MARK: - Language
+
+    /// With auto language, detects the language on the busiest 30 s windows of a track.
+    /// Returns it when the windows agree, so the whole track is decoded in one language.
+    /// Whisper otherwise picks a language per chunk and sometimes translates instead of transcribing.
+    private func trackLanguage(_ audio: [Float]) async -> String? {
+        guard Prefs.language == .auto, let whisper else { return nil }
+        let windows = Self.detectionWindows(audio)
+        var votes: [String] = []
+        for start in windows {
+            let slice = Array(audio[start..<min(audio.count, start + Self.windowSamples)])
+            if let result = try? await whisper.detectLangauge(audioArray: slice) { votes.append(result.language) }
+        }
+        let locked = Self.lockedLanguage(votes)
+        NSLog("Language votes \(votes) -> \(locked ?? "auto")")
+        return locked
+    }
+
+    static let windowSamples = 30 * 16000
+
+    /// Start offsets of up to `count` 30 s windows with the most speech, at least 3 s of it each.
+    static func detectionWindows(_ audio: [Float], count: Int = 5) -> [Int] {
+        var scored: [(start: Int, active: Double)] = []
+        var start = 0
+        while start < audio.count {
+            let end = min(audio.count, start + windowSamples)
+            let active = activeSeconds(Array(audio[start..<end]))
+            if active >= 3 { scored.append((start, active)) }
+            start += windowSamples
+        }
+        return scored.sorted { $0.active > $1.active }.prefix(count).map(\.start).sorted()
+    }
+
+    /// The language most windows agree on, if at least 75 percent of them do.
+    static func lockedLanguage(_ votes: [String]) -> String? {
+        guard !votes.isEmpty else { return nil }
+        let counts = Dictionary(votes.map { ($0, 1) }, uniquingKeysWith: +)
+        guard let top = counts.max(by: { $0.value < $1.value }) else { return nil }
+        return Double(top.value) / Double(votes.count) >= 0.75 ? top.key : nil
+    }
+
+    static func languageName(_ code: String) -> String {
+        Locale(identifier: "en").localizedString(forLanguageCode: code) ?? code
+    }
+
     // MARK: - Live
 
     /// Transcribes a short live chunk. Times are relative to the chunk start.
@@ -102,8 +148,12 @@ final class TranscriptionEngine: @unchecked Sendable {
         guard let whisper else { return [] }
         do {
             let results = try await whisper.transcribe(audioArray: samples, decodeOptions: options(wordTimestamps: false, chunked: false))
+            // A chunk is too short to know the speaker's level, so compare against normal speech loudness.
+            let levels = HallucinationFilter.frameLevels(samples)
             return results.flatMap(\.segments).compactMap { seg in
                 guard let text = HallucinationFilter.clean(seg.text, noSpeechProb: seg.noSpeechProb, avgLogprob: seg.avgLogprob) else { return nil }
+                let peak = HallucinationFilter.peak(levels, start: Double(seg.start), end: Double(seg.end))
+                if HallucinationFilter.isOnSilence(text, peak: peak, speechLevel: 0.05) { return nil }
                 return (Double(seg.start), Double(seg.end), text)
             }
         } catch {
@@ -162,7 +212,6 @@ final class TranscriptionEngine: @unchecked Sendable {
     }
 
     private func finalPass(_ whisper: WhisperKit, _ input: FinalInput, status: @escaping @Sendable (String) -> Void) async throws -> [TranscriptSegment] {
-        let opts = options(wordTimestamps: true, chunked: true)
         let systemPath = input.systemURL.map(\.path).flatMap { FileManager.default.fileExists(atPath: $0) ? $0 : nil }
 
         // Decide call vs in-person from the system track, then drop it until it is needed.
@@ -174,8 +223,12 @@ final class TranscriptionEngine: @unchecked Sendable {
         }
 
         var micAudio = try AudioProcessor.loadAudioAsFloatArray(fromPath: input.micURL.path)
-        status("Transcribing microphone…")
-        let micResults = try await whisper.transcribe(audioArray: micAudio, decodeOptions: opts)
+        status("Detecting language…")
+        let micLanguage = await trackLanguage(micAudio)
+        status("Transcribing microphone\(micLanguage.map { " (\(Self.languageName($0)))" } ?? "")…")
+        let micResults = Self.dropStrayLanguage(try await whisper.transcribe(
+            audioArray: micAudio, decodeOptions: options(wordTimestamps: true, chunked: true, language: micLanguage)))
+        let micLevels = HallucinationFilter.frameLevels(micAudio)
 
         guard hasCall, let systemPath else {
             // In-person meeting: everyone is on the mic, so split the mic track instead.
@@ -188,16 +241,21 @@ final class TranscriptionEngine: @unchecked Sendable {
                 NSLog("Diarization failed: \(error)")
                 segments = plainSegments(micResults, speaker: "me")
             }
+            segments = HallucinationFilter.dropSilent(segments, levels: micLevels)
             segments.sort { $0.start < $1.start }
             return Self.relabelSpeakers(segments)
         }
 
         micAudio = []
-        let micSegments = plainSegments(micResults, speaker: "me")
+        let micSegments = HallucinationFilter.dropSilent(plainSegments(micResults, speaker: "me"), levels: micLevels)
 
         var systemAudio = try AudioProcessor.loadAudioAsFloatArray(fromPath: systemPath)
-        status("Transcribing call audio…")
-        let callResults = try await whisper.transcribe(audioArray: systemAudio, decodeOptions: opts)
+        status("Detecting language…")
+        let callLanguage = await trackLanguage(systemAudio)
+        status("Transcribing call audio\(callLanguage.map { " (\(Self.languageName($0)))" } ?? "")…")
+        let callResults = Self.dropStrayLanguage(try await whisper.transcribe(
+            audioArray: systemAudio, decodeOptions: options(wordTimestamps: true, chunked: true, language: callLanguage)))
+        let systemLevels = HallucinationFilter.frameLevels(systemAudio)
         status("Identifying speakers…")
         var diarization: DiarizationResult?
         do {
@@ -207,8 +265,10 @@ final class TranscriptionEngine: @unchecked Sendable {
         }
         systemAudio = []
 
-        let callSegments = diarization.map { speakerSegments($0.addSpeakerInfo(to: callResults), fallback: "them") }
-            ?? plainSegments(callResults, speaker: "them")
+        let callSegments = HallucinationFilter.dropSilent(
+            diarization.map { speakerSegments($0.addSpeakerInfo(to: callResults), fallback: "them") }
+                ?? plainSegments(callResults, speaker: "them"),
+            levels: systemLevels)
         let mic = Self.removeEcho(mic: micSegments, call: callSegments)
         return Self.relabelSpeakers((mic + callSegments).sorted { $0.start < $1.start })
     }
@@ -219,6 +279,13 @@ final class TranscriptionEngine: @unchecked Sendable {
     }
 
     // MARK: - Helpers
+
+    /// With auto language, drops short VAD chunks that Whisper decoded in a different language than the rest.
+    private static func dropStrayLanguage(_ results: [TranscriptionResult]) -> [TranscriptionResult] {
+        guard Prefs.language == .auto, results.count > 1 else { return results }
+        let stray = HallucinationFilter.strayLanguageParts(results.map { ($0.language, $0.text) })
+        return results.enumerated().filter { !stray.contains($0.offset) }.map(\.element)
+    }
 
     private func plainSegments(_ results: [TranscriptionResult], speaker: String) -> [TranscriptSegment] {
         results.flatMap(\.segments).compactMap { seg in
