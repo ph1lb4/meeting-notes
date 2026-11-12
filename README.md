@@ -25,9 +25,10 @@ Meeting bots are awkward, cloud transcription is a privacy question, and most no
 - **Live, then clean.** Text shows up while you talk. After you hit Stop, a second, more accurate pass runs over the full recording and adds the speaker labels.
 - **Cleaner transcripts.** Claude fixes misheard words, names and terms after each meeting. Add your own vocabulary in Settings. One click undoes the fixes.
 - **Your own notes.** Type notes during the meeting. They get a timestamp and land in the transcript and the summary.
-- **Summaries.** Summary, key points, decisions, open questions and action items. Written by the [Claude Code](https://claude.com/claude-code) CLI if you have it, or by Apple Intelligence fully on device.
+- **Summaries.** Summary, key points, open questions, a decision log and action items. Long or short, your pick. Written by the [Claude Code](https://claude.com/claude-code) CLI if you have it, or by Apple Intelligence fully on device.
 - **Plain files.** Every meeting is a folder with Markdown files. No database, no account, no lock in.
 - **Notion ready.** One click copies clean Markdown with headings, bullets and `- [ ]` to-dos.
+- **Send to Notion or Linear.** If your Claude Code has the Notion or Linear MCP connected, one click files the meeting there: a Notion page, or one Linear issue per action item. Claude tells you where it went.
 
 ## Install
 
@@ -54,7 +55,7 @@ For summaries, either install and log in to [Claude Code](https://claude.com/cla
 ~/Documents/Meeting Notes/
   2026-11-10 09-00 Onboarding launch plan/
     transcript.md   your notes + full transcript
-    summary.md      summary and action items
+    summary.md      summary, decisions and action items
     meeting.json    app state
     audio/          only with "Keep audio"
 ```

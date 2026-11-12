@@ -139,10 +139,12 @@ private struct SummarySettings: View {
 
     @AppStorage(Prefs.Key.summaryEngine) private var engineChoice = SummaryEngineChoice.auto.rawValue
     @AppStorage(Prefs.Key.autoSummarize) private var autoSummarize = true
+    @AppStorage(Prefs.Key.summaryLength) private var summaryLength = SummaryLength.long.rawValue
     @AppStorage(Prefs.Key.claudePath) private var claudePath = ""
     @AppStorage(Prefs.Key.claudeModel) private var claudeModel = ""
 
     @State private var checking = false
+    @State private var checkingIntegrations = false
     @State private var claudeTest: TestResult?
     @State private var appleTest: TestResult?
 
@@ -156,10 +158,17 @@ private struct SummarySettings: View {
                     ForEach(SummaryEngineChoice.allCases) { Text($0.label).tag($0.rawValue) }
                 }
                 Text(choice.detail).font(.caption).foregroundStyle(.secondary)
+                Picker("Length", selection: $summaryLength) {
+                    ForEach(SummaryLength.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                Text((SummaryLength(rawValue: summaryLength) ?? .long).detail + " Decisions and action items are always listed.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Summarize automatically after each meeting", isOn: $autoSummarize)
             }
 
             claudeSection
+            integrationsSection
             appleSection
         }
         .formStyle(.grouped)
@@ -267,6 +276,39 @@ private struct SummarySettings: View {
             Link("Installation guide", destination: ClaudeRunner.installGuideURL).font(.callout)
         }
         .padding(.vertical, 4)
+    }
+
+    // MARK: Notion, Linear
+
+    private var integrationsSection: some View {
+        Section {
+            ForEach(ExportTarget.allCases) { target in
+                LabeledContent(target.label) {
+                    if !state.integrationsChecked || checkingIntegrations {
+                        Text("Checking…").foregroundStyle(.secondary)
+                    } else if let server = state.integrations[target] {
+                        StatusLabel(text: "Connected (\(server))", color: .green)
+                    } else {
+                        StatusLabel(text: "Not connected", color: .secondary)
+                    }
+                }
+            }
+            HStack {
+                Button("Check Again") {
+                    Task {
+                        checkingIntegrations = true
+                        await state.refreshIntegrations()
+                        checkingIntegrations = false
+                    }
+                }
+                .disabled(state.claudeCLI == nil || checkingIntegrations)
+                Spacer()
+            }
+            Text("Uses the Notion and Linear MCP servers of your Claude Code. When one is connected, the summary page gets a button to send the meeting there. Claude only gets the tools of that one service. Not shown with \"Apple Intelligence only\".")
+                .font(.caption).foregroundStyle(.secondary)
+        } header: {
+            Text("Notion and Linear")
+        }
     }
 
     // MARK: Apple Intelligence

@@ -109,6 +109,7 @@ struct SummaryPage: View {
 
     @State private var text: String?
     @State private var loaded = false
+    @State private var exportTarget: ExportTarget?
 
     private struct LoadKey: Hashable {
         var id: UUID
@@ -128,6 +129,10 @@ struct SummaryPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     summaryContent
+                    if !meeting.exports.isEmpty {
+                        Divider()
+                        ExportsSection(meeting: meeting)
+                    }
                     Divider()
                     NotesSection(meeting: meeting)
                 }
@@ -149,11 +154,30 @@ struct SummaryPage: View {
             text = content
             loaded = true
         }
+        .sheet(item: $exportTarget) { target in
+            ExportSheet(meeting: meeting, target: target)
+        }
     }
 
     private var actionBar: some View {
         HStack(spacing: 14) {
             Spacer()
+            if meeting.hasSummary, !summarizing {
+                ForEach(state.exportTargets) { target in
+                    if state.exporting[meeting.id] == target {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Sending to \(target.label)…").font(.callout).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        PageActionButton(title: target.label, systemImage: "paperplane",
+                                         help: "Send this meeting to \(target.label) with Claude") {
+                            exportTarget = target
+                        }
+                        .disabled(busy || state.exporting[meeting.id] != nil)
+                    }
+                }
+            }
             if let text, !summarizing {
                 PageActionButton(title: "Copy", systemImage: "doc.on.doc",
                                  help: "Copy the summary as Markdown (pastes cleanly into Notion)") {
@@ -200,6 +224,138 @@ struct SummaryPage: View {
                     .disabled(busy || meeting.segments.isEmpty)
             }
             .frame(maxWidth: .infinity, minHeight: 160)
+        }
+    }
+}
+
+/// Asks where and how to store the meeting, runs Claude with the Notion or Linear tools and shows where it went.
+struct ExportSheet: View {
+    @Environment(AppState.self) private var state
+    @Environment(\.dismiss) private var dismiss
+    let meeting: Meeting
+    let target: ExportTarget
+
+    @State private var request = ""
+    @State private var task: Task<Void, Never>?
+    @State private var record: ExportRecord?
+    @State private var error: String?
+
+    private var running: Bool { task != nil }
+
+    private var placeholder: String {
+        switch target {
+        case .notion: return "e.g. Add it to the Team Meetings database, tag it Project X"
+        case .linear: return "e.g. Team iOS, project Launch, assign to me"
+        }
+    }
+
+    private var explainer: String {
+        switch target {
+        case .notion: return "Claude creates a Notion page with the summary, decisions and action items."
+        case .linear: return "Claude creates one Linear issue per action item."
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Send to \(target.label)").font(.title3.weight(.semibold))
+            if let record {
+                Text("Done. Claude says:").foregroundStyle(.secondary)
+                ExportResultView(record: record)
+            } else {
+                Text(explainer).foregroundStyle(.secondary)
+                TextField("Where and how?", text: $request, prompt: Text(placeholder), axis: .vertical)
+                    .lineLimit(3...6)
+                    .disabled(running)
+                Text("Optional. Tell Claude where it goes and anything it should know.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if running {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Claude is working in \(target.label). This can take a minute.").foregroundStyle(.secondary)
+                    }
+                }
+                if let error {
+                    Text(error).foregroundStyle(.red).textSelection(.enabled).lineLimit(6)
+                }
+            }
+            HStack {
+                Spacer()
+                if record != nil {
+                    Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                } else if running {
+                    Button("Stop") { task?.cancel() }
+                } else {
+                    Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                    Button("Send") { send() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(state.exporting[meeting.id] != nil)
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+        .interactiveDismissDisabled(running)
+    }
+
+    private func send() {
+        error = nil
+        task = Task {
+            defer { task = nil }
+            do {
+                record = try await state.export(meeting.id, to: target, request: request)
+            } catch is CancellationError {
+                error = "Stopped. Claude may have created some items already."
+            } catch {
+                self.error = Task.isCancelled ? "Stopped. Claude may have created some items already." : error.localizedDescription
+            }
+        }
+    }
+}
+
+/// Claude's report of an export, with clickable links only for the target service.
+struct ExportResultView: View {
+    let record: ExportRecord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            MarkdownView(markdown: record.result)
+            ForEach(ClaudeExporter.links(in: record.result, for: record.target), id: \.self) { url in
+                Link(destination: url) {
+                    Label("Open in \(record.target.label)", systemImage: "arrow.up.forward.square")
+                }
+                .font(.callout)
+                .help(url.absoluteString)
+            }
+        }
+    }
+}
+
+/// Where this meeting was sent before.
+struct ExportsSection: View {
+    @Environment(AppState.self) private var state
+    let meeting: Meeting
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Sent to").font(.title3.weight(.semibold))
+            ForEach(meeting.exports.reversed()) { record in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("\(record.target.label) · \(record.date.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.callout.weight(.medium))
+                        Spacer()
+                        Button {
+                            state.deleteExport(record.id, from: meeting.id)
+                        } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.tertiary)
+                        .help("Remove from this list (does not delete anything in \(record.target.label))")
+                    }
+                    ExportResultView(record: record)
+                        .font(.callout)
+                }
+            }
         }
     }
 }

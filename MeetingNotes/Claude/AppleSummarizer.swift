@@ -132,22 +132,25 @@ enum AppleSummarizer {
     }
 
     /// Renders the model result in the same Markdown layout the Claude summary uses.
+    /// Decisions and action items come back as their own sections, like Claude's.
+    /// `.short` caps the lists so the summary stays readable at a glance.
     static func render(overview: String, keyPoints: [String], decisions: [String],
-                       openQuestions: [String], actionItems: [Item]) -> (summary: String, actionItems: String) {
-        func bullets(_ items: [String]) -> String {
-            items.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                       openQuestions: [String], actionItems: [Item],
+                       length: SummaryLength = .long) -> ClaudeRunner.Output {
+        let short = length == .short
+        func clean(_ items: [String], max: Int) -> [String] {
+            Array(items.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-                .map { "- \($0)" }
-                .joined(separator: "\n")
+                .prefix(short ? max : .max))
         }
+        func bullets(_ items: [String]) -> String { items.map { "- \($0)" }.joined(separator: "\n") }
         var parts = ["## Summary\n\(overview.trimmingCharacters(in: .whitespacesAndNewlines))"]
-        let points = bullets(keyPoints)
-        if !points.isEmpty { parts.append("## Key points\n\(points)") }
-        let dec = bullets(decisions)
-        if !dec.isEmpty { parts.append("## Decisions\n\(dec)") }
-        let open = bullets(openQuestions)
-        if !open.isEmpty { parts.append("## Open questions\n\(open)") }
+        let points = clean(keyPoints, max: 5)
+        if !points.isEmpty { parts.append("## Key points\n\(bullets(points))") }
+        let open = clean(openQuestions, max: 3)
+        if !open.isEmpty { parts.append("## Open questions\n\(bullets(open))") }
 
+        let dec = clean(decisions, max: 5)
         let todos = actionItems
             .filter { !$0.task.trimmingCharacters(in: .whitespaces).isEmpty }
             .map { item -> String in
@@ -155,7 +158,11 @@ enum AppleSummarizer {
                 let due = item.due.trimmingCharacters(in: .whitespaces)
                 return "- [ ] **\(owner.isEmpty ? "Unassigned" : owner):** \(item.task)" + (due.isEmpty ? "" : " (\(due))")
             }
-        return (parts.joined(separator: "\n\n"), todos.isEmpty ? "No action items." : todos.joined(separator: "\n"))
+        return ClaudeRunner.Output(
+            title: nil,
+            summary: parts.joined(separator: "\n\n"),
+            decisions: dec.isEmpty ? ClaudeRunner.noDecisions : bullets(dec),
+            actionItems: todos.isEmpty ? ClaudeRunner.noActionItems : todos.joined(separator: "\n"))
     }
 }
 
@@ -225,8 +232,9 @@ private enum AppleEngine {
 
         let text = String(material.joined(separator: "\n").prefix(AppleSummarizer.chunkLimit))
         let source = rounds == 0 ? "Transcript" : "Notes from the parts of the meeting"
+        let length = Prefs.summaryLength
         let prompt = """
-        Write meeting notes from the material below.
+        Write \(length == .short ? "short, brief " : "")meeting notes from the material below.
         \(userNotes.isEmpty ? "" : "The user's own notes are the most reliable source for names and terms:\n\(userNotes)\n")
         \(source):
         \(text)
@@ -235,15 +243,16 @@ private enum AppleEngine {
         let notes = try await LanguageModelSession(instructions: instructions)
             .respond(to: prompt, generating: Notes.self).content
 
-        let rendered = AppleSummarizer.render(
+        var rendered = AppleSummarizer.render(
             overview: notes.overview, keyPoints: notes.keyPoints, decisions: notes.decisions,
             openQuestions: notes.openQuestions,
-            actionItems: notes.actionItems.map { .init(owner: $0.owner, task: $0.task, due: $0.due) })
+            actionItems: notes.actionItems.map { .init(owner: $0.owner, task: $0.task, due: $0.due) },
+            length: length)
         guard !notes.overview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw AppleSummarizer.RunError.empty
         }
-        return ClaudeRunner.Output(title: ClaudeRunner.cleanTitle(notes.title),
-                                   summary: rendered.summary, actionItems: rendered.actionItems)
+        rendered.title = ClaudeRunner.cleanTitle(notes.title)
+        return rendered
     }
 
     /// Notes for one part of the transcript as plain lines. Splits the part in half if it is too big.

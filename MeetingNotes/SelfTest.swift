@@ -47,8 +47,7 @@ enum SelfTest {
                         ? try await AppleSummarizer.run(for: meeting)
                         : try await ClaudeRunner.run(for: meeting, workingDirectory: FileManager.default.temporaryDirectory)
                     print("TITLE:", out.title ?? "-")
-                    print(out.summary)
-                    print(out.actionItems)
+                    print(out.markdown)
                 }
                 exit(0)
             } catch {
@@ -88,8 +87,7 @@ enum SelfTest {
                 let out = try await AppleSummarizer.run(for: meeting)
                 print("done in \(Int(Date().timeIntervalSince(t0)))s")
                 print("TITLE:", out.title ?? "-")
-                print(out.summary)
-                print(out.actionItems)
+                print(out.markdown)
                 exit(0)
             } catch {
                 print("APPLE TEST FAILED:", error)

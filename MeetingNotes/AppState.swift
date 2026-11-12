@@ -52,6 +52,11 @@ final class AppState {
     var claudeVersion: String?
     /// False until the first engine check is done, so the UI does not flash "not found".
     var enginesChecked = false
+    /// Connected Claude Code MCP server for each export target, from `claude mcp list`.
+    var integrations: [ExportTarget: String] = [:]
+    var integrationsChecked = false
+    /// Running Notion / Linear export per meeting.
+    var exporting: [UUID: ExportTarget] = [:]
     var errorMessage: String?
     var warningMessage: String?
 
@@ -128,7 +133,10 @@ final class AppState {
         Prefs.registerDefaults()
         prepareModel()
         reload()
-        Task { await refreshSummaryEngines() }
+        Task {
+            await refreshSummaryEngines()
+            await refreshIntegrations()
+        }
     }
 
     // MARK: - Loading
@@ -607,9 +615,8 @@ final class AppState {
                 }
                 guard var current = meeting(id) else { return }
                 let dir = MeetingStore.folder(for: current)
-                // Action items live in the summary page, so they go into summary.md.
-                let summary = "# \(current.title)\n\n\(MarkdownExporter.header(for: current))\n\n" + out.summary
-                    + "\n\n## Action items\n\n" + out.actionItems + "\n"
+                // Decisions and action items live in the summary page, so they go into summary.md.
+                let summary = "# \(current.title)\n\n\(MarkdownExporter.header(for: current))\n\n" + out.markdown
                 do {
                     try ioQueue.sync {
                         try MeetingStore.write(summary, to: dir.appendingPathComponent(MeetingStore.summaryName))
@@ -632,6 +639,58 @@ final class AppState {
 
     func cancelSummary(_ id: UUID) {
         summaryTasks[id]?.cancel()
+    }
+
+    // MARK: - Export (Notion, Linear)
+
+    /// Asks Claude Code which MCP servers are connected. Slow (health checks), so it runs at launch and on demand.
+    func refreshIntegrations() async {
+        guard let claude = claudeCLI else {
+            integrations = [:]
+            integrationsChecked = true
+            return
+        }
+        let servers = await ClaudeExporter.servers(claudePath: claude)
+        integrations = ClaudeExporter.match(servers)
+        integrationsChecked = true
+    }
+
+    /// Export targets shown on the summary page. None with "Apple Intelligence only", since this sends data to Anthropic.
+    var exportTargets: [ExportTarget] {
+        guard claudeCLI != nil, engineChoice != .apple else { return [] }
+        return ExportTarget.allCases.filter { integrations[$0] != nil }
+    }
+
+    /// Sends the summary to Notion or Linear. Returns Claude's report and keeps it on the meeting.
+    /// Cancelling the calling task stops Claude.
+    func export(_ id: UUID, to target: ExportTarget, request: String) async throws -> ExportRecord {
+        guard let m = meeting(id), m.hasSummary, exporting[id] == nil else { throw CancellationError() }
+        guard let claude = claudeCLI, let server = integrations[target] else {
+            throw ClaudeRunner.RunError.failed("\(target.label) is not connected in Claude Code. Add it with `claude mcp add` or in the Claude app, then try again.")
+        }
+        exporting[id] = target
+        defer { exporting[id] = nil }
+        let url = MeetingStore.folder(for: m).appendingPathComponent(MeetingStore.summaryName)
+        let summary = try await Task.detached { try String(contentsOf: url, encoding: .utf8) }.value
+        let result = try await ClaudeExporter.run(target: target, server: server, title: m.title, summary: summary,
+                                                  request: request, claudePath: claude)
+        // Without a link to the service nothing was stored, so it is an error, not an entry in "Sent to".
+        guard !ClaudeExporter.links(in: result, for: target).isEmpty else {
+            throw ClaudeRunner.RunError.failed(result)
+        }
+        let record = ExportRecord(target: target, date: Date(), result: result)
+        if var current = meeting(id) {
+            current.exports.append(record)
+            update(current)
+            flushSave(id)
+        }
+        return record
+    }
+
+    func deleteExport(_ recordID: UUID, from id: UUID) {
+        guard var m = meeting(id) else { return }
+        m.exports.removeAll { $0.id == recordID }
+        update(m)
     }
 
     // MARK: - Saving

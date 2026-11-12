@@ -22,6 +22,34 @@ struct MeetingNote: Codable, Identifiable, Hashable {
     var text: String
 }
 
+/// Where a meeting can be sent through the user's Claude Code MCP servers.
+enum ExportTarget: String, Codable, CaseIterable, Identifiable {
+    case notion, linear
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .notion: return "Notion"
+        case .linear: return "Linear"
+        }
+    }
+    /// Only links to these hosts are shown as clickable after an export.
+    var hosts: [String] {
+        switch self {
+        case .notion: return ["notion.so", "notion.site", "notion.com"]
+        case .linear: return ["linear.app"]
+        }
+    }
+}
+
+/// One finished export: where Claude says it stored the meeting.
+struct ExportRecord: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var target: ExportTarget
+    var date: Date
+    /// Claude's short answer, plain Markdown.
+    var result: String
+}
+
 enum MeetingPhase: String, Codable {
     case recording
     case finalizing
@@ -46,10 +74,12 @@ struct Meeting: Codable, Identifiable, Hashable {
     var summaryRevision = 0
     /// Segment id -> text before Claude's cleanup, for lines Claude changed. Lets the user undo the fixes.
     var originalTexts: [String: String] = [:]
+    /// Notion / Linear exports, oldest first.
+    var exports: [ExportRecord] = []
 
     enum CodingKeys: String, CodingKey {
         case id, title, createdAt, duration, phase, segments, notes, speakerNames, folderName
-        case hasSummary, titleEdited, summaryRevision, originalTexts
+        case hasSummary, titleEdited, summaryRevision, originalTexts, exports
     }
 
     func displayName(for speaker: String) -> String {
@@ -153,6 +183,7 @@ extension Meeting {
         titleEdited = try c.decodeIfPresent(Bool.self, forKey: .titleEdited) ?? false
         summaryRevision = try c.decodeIfPresent(Int.self, forKey: .summaryRevision) ?? 0
         originalTexts = try c.decodeIfPresent([String: String].self, forKey: .originalTexts) ?? [:]
+        exports = try c.decodeIfPresent([ExportRecord].self, forKey: .exports) ?? []
     }
 }
 

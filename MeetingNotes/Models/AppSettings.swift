@@ -33,6 +33,24 @@ enum SummaryEngineChoice: String, CaseIterable, Identifiable {
     }
 }
 
+/// How long the summary is. `long` is the original layout.
+enum SummaryLength: String, CaseIterable, Identifiable {
+    case long, short
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .long: return "Long"
+        case .short: return "Short"
+        }
+    }
+    var detail: String {
+        switch self {
+        case .long: return "Full notes with key points by topic."
+        case .short: return "A few lines you can read in 30 seconds."
+        }
+    }
+}
+
 struct WhisperModelOption: Identifiable, Hashable {
     let id: String
     let label: String
@@ -69,6 +87,7 @@ enum Prefs {
         static let vocabulary = "vocabulary"
         /// After the final pass, let Claude fix misheard words in the transcript.
         static let cleanupTranscript = "cleanupTranscript"
+        static let summaryLength = "summaryLength"
     }
 
     static func registerDefaults() {
@@ -85,6 +104,7 @@ enum Prefs {
             Key.autoStopOnCallEnd: true,
             Key.vocabulary: "",
             Key.cleanupTranscript: true,
+            Key.summaryLength: SummaryLength.long.rawValue,
         ])
     }
 
@@ -108,6 +128,9 @@ enum Prefs {
     static var micDeviceUID: String { defaults.string(forKey: Key.micDeviceUID) ?? "" }
     static var claudePath: String { defaults.string(forKey: Key.claudePath) ?? "" }
     static var claudeModel: String { defaults.string(forKey: Key.claudeModel) ?? "" }
+    static var summaryLength: SummaryLength {
+        SummaryLength(rawValue: defaults.string(forKey: Key.summaryLength) ?? "") ?? .long
+    }
     static var summaryEngine: SummaryEngineChoice {
         SummaryEngineChoice(rawValue: defaults.string(forKey: Key.summaryEngine) ?? "") ?? .auto
     }
