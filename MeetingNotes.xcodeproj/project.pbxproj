@@ -17,6 +17,8 @@
 		230509E06E85C3056478EEF4 /* AppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 191207878B16B0307BCCA584 /* AppUpdater.swift */; };
 		2366C49EEA827A2FBB812582 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992115D1EB48C9DD7578FEAC /* AppState.swift */; };
 		24513E2CE5EE0E88FF66F8AE /* Meeting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9859880B54F8C9FC3952B668 /* Meeting.swift */; };
+		249798EE9E69A0505AAB3D93 /* LoginItemSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C679D9E0794F3439A2F4B7A7 /* LoginItemSettingsSection.swift */; };
+		26E37CEC6621DCA56E552F68 /* LoginItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66FD79000678ECEF46E7E3CD /* LoginItem.swift */; };
 		27C7F35F8CB6245613B5DD9E /* SelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 994036493DB24F0DC9A61B58 /* SelfTest.swift */; };
 		2921314FAF7A4D075C533624 /* ClaudeRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3D12F871F7E95F59383A1EA /* ClaudeRunner.swift */; };
 		309047A8FC2E874C2EE114FC /* MeetingDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF95965AFDF23BD4250BE7B /* MeetingDetailView.swift */; };
@@ -70,6 +72,7 @@
 		531E442AC4E44537FDA3C106 /* TranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionEngine.swift; sourceTree = "<group>"; };
 		5EC249A2E89E61737D39090D /* MicCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicCapture.swift; sourceTree = "<group>"; };
 		606AF966F9688C1A4666C59A /* AppleSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSummarizer.swift; sourceTree = "<group>"; };
+		66FD79000678ECEF46E7E3CD /* LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItem.swift; sourceTree = "<group>"; };
 		68587700A7A3E826204D60FB /* ClaudeExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeExporter.swift; sourceTree = "<group>"; };
 		687B46B1E0F31BABE72DCD1D /* SystemAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioCapture.swift; sourceTree = "<group>"; };
 		6EE939D758F4E92D7F2AD16F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -90,6 +93,7 @@
 		BBF95965AFDF23BD4250BE7B /* MeetingDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDetailView.swift; sourceTree = "<group>"; };
 		BC1D7E1CF237E1F73C85C899 /* HallucinationFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HallucinationFilter.swift; sourceTree = "<group>"; };
 		BC3197BB9BDA55D33870AB6B /* UpdateStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateStatus.swift; sourceTree = "<group>"; };
+		C679D9E0794F3439A2F4B7A7 /* LoginItemSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemSettingsSection.swift; sourceTree = "<group>"; };
 		D630E58E6CA5D17340D49CA1 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		DA6F0444BA3B2E1A04E61B76 /* MicUsage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicUsage.swift; sourceTree = "<group>"; };
 		E0F285F2937607F8ABA6971D /* TranscriptCleaner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptCleaner.swift; sourceTree = "<group>"; };
@@ -123,6 +127,7 @@
 		3EB1134E07979BCF0DCEB3F3 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C679D9E0794F3439A2F4B7A7 /* LoginItemSettingsSection.swift */,
 				D630E58E6CA5D17340D49CA1 /* MainView.swift */,
 				1D44602F57E880C284B87D8F /* MarkdownView.swift */,
 				BBF95965AFDF23BD4250BE7B /* MeetingDetailView.swift */,
@@ -148,6 +153,7 @@
 				992115D1EB48C9DD7578FEAC /* AppState.swift */,
 				3748910ECA730A352C0F996A /* Assets.xcassets */,
 				6EE939D758F4E92D7F2AD16F /* Info.plist */,
+				66FD79000678ECEF46E7E3CD /* LoginItem.swift */,
 				F812575EF6D7D28B16AF3C1F /* MeetingNotes.entitlements */,
 				8746CB170C91245362E136D8 /* MeetingNotesApp.swift */,
 				994036493DB24F0DC9A61B58 /* SelfTest.swift */,
@@ -348,6 +354,8 @@
 				1A8D770BC2E2695C5A610AAA /* ClaudeExporter.swift in Sources */,
 				2921314FAF7A4D075C533624 /* ClaudeRunner.swift in Sources */,
 				9AF5598BF5B1E4C0DF2BD3A4 /* HallucinationFilter.swift in Sources */,
+				26E37CEC6621DCA56E552F68 /* LoginItem.swift in Sources */,
+				249798EE9E69A0505AAB3D93 /* LoginItemSettingsSection.swift in Sources */,
 				38537A09824E50CF55647B18 /* MainView.swift in Sources */,
 				A12C765C6FA02080350CB4ED /* MarkdownExporter.swift in Sources */,
 				859BE4C472A0E091563C5597 /* MarkdownView.swift in Sources */,

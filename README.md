@@ -29,6 +29,7 @@ Meeting bots are awkward, cloud transcription is a privacy question, and most no
 - **Plain files.** Every meeting is a folder with Markdown files. No database, no account, no lock in.
 - **Notion ready.** One click copies clean Markdown with headings, bullets and `- [ ]` to-dos.
 - **Send to Notion or Linear.** If your Claude Code has the Notion or Linear MCP connected, one click files the meeting there: a Notion page, or one Linear issue per action item. Claude tells you where it went.
+- **Open at login.** Turn it on in Settings and Meeting Notes starts in the menu bar when you log in to your Mac, with no window in your way.
 
 ## Install
 

@@ -67,4 +67,6 @@ Signing is manual (`Apple Development`, team in `project.yml`), hardened runtime
 
 **Settings** live in `UserDefaults` via the `Prefs` enum so non-UI code can read them. Add new keys to `Prefs.Key` and `registerDefaults()`. Whisper models download to `~/Library/Application Support/MeetingNotes/Models`, with an offline fallback to an earlier download.
 
+**Login item:** `LoginItem` wraps `SMAppService.mainApp` ("Open Meeting Notes at login" in Settings, off by default). macOS holds the state, so there is no `Prefs` key. When macOS starts the app as a login item, `AppDelegate` closes the main window with no animation, so the app starts in the menu bar only. The login flag (`LoginItem.startedAtLogin`) is only readable in `applicationDidFinishLaunching`.
+
 **Permissions:** `NSMicrophoneUsageDescription` and `NSAudioCaptureUsageDescription` are set in `project.yml` (`info.properties`), not directly in `Info.plist`.

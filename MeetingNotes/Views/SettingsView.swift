@@ -30,6 +30,8 @@ private struct GeneralSettings: View {
 
     var body: some View {
         Form {
+            LoginItemSettingsSection()
+
             Section("Transcription") {
                 Picker("Whisper model", selection: $model) {
                     ForEach(WhisperModelOption.all) { option in

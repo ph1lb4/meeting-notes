@@ -61,6 +61,15 @@ struct MeetingNotesApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var state: AppState?
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        guard LoginItem.startedAtLogin else { return }
+        // At login the app starts in the menu bar only.
+        for window in NSApp.windows where window.canBecomeMain {
+            window.animationBehavior = .none
+            window.close()
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
