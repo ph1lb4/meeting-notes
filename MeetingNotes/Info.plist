@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.2</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>3</string>
+	<string>4</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>NSAudioCaptureUsageDescription</key>
@@ -33,6 +33,6 @@
 	<key>SUFeedURL</key>
 	<string>https://github.com/ph1lb4/meeting-notes/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string></string>
+	<string>je5AFFnXEmH7U4dsimoAT/miDE+93kXwK7fmAD42cSI=</string>
 </dict>
 </plist>
