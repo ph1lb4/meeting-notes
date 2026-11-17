@@ -13,6 +13,7 @@ struct MeetingNotesApp: App {
         let state = AppState.shared
         _state = State(initialValue: state)
         AppDelegate.state = state
+        AppUpdater.shared.start { state.isRecording || !state.finalizing.isEmpty }
     }
 
     /// A second process (e.g. Debug and Release builds) would treat the other one's recording as
@@ -34,6 +35,10 @@ struct MeetingNotesApp: App {
         }
         .defaultSize(width: 980, height: 680)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { AppUpdater.shared.checkNow() }
+                    .disabled(!AppUpdater.shared.canCheck)
+            }
             CommandGroup(after: .newItem) {
                 Button(state.isRecording ? "Stop Recording" : "Start Recording") { state.toggleRecording() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])

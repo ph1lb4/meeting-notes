@@ -9,6 +9,9 @@ packages:
   ArgmaxOSS:
     url: https://github.com/argmaxinc/argmax-oss-swift
     exactVersion: 1.1.1
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
 
 settings:
   base:
@@ -30,6 +33,7 @@ targets:
         product: WhisperKit
       - package: ArgmaxOSS
         product: SpeakerKit
+      - package: Sparkle
     info:
       path: MeetingNotes/Info.plist
       properties:
@@ -41,6 +45,9 @@ targets:
         NSMicrophoneUsageDescription: Meeting Notes listens to your microphone to transcribe what you say in meetings.
         NSAudioCaptureUsageDescription: Meeting Notes captures call audio from apps like Zoom, Teams or Meet to transcribe the other participants.
         NSHumanReadableCopyright: ""
+        SUFeedURL: https://github.com/ph1lb4/meeting-notes/releases/latest/download/appcast.xml
+        SUPublicEDKey: ""
+        SUEnableAutomaticChecks: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.soonup.meetingnotes

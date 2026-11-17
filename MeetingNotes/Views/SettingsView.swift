@@ -101,6 +101,8 @@ private struct GeneralSettings: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+
+            UpdateSettingsSection()
         }
         .formStyle(.grouped)
         .fixedSize(horizontal: false, vertical: true)

@@ -33,9 +33,16 @@ struct MenuBarView: View {
             }
         }
         Divider()
+        Button(updateTitle) { AppUpdater.shared.checkNow() }
+            .disabled(!AppUpdater.shared.canCheck)
         SettingsLink { Text("Settings…") }
         Button("Quit Meeting Notes") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
+    }
+
+    private var updateTitle: String {
+        if case .available(let version) = AppUpdater.shared.status { return "Install Version \(version)…" }
+        return "Check for Updates…"
     }
 
     private func showWindow() {
