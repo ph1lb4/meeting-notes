@@ -97,7 +97,7 @@ enum TranscriptCleaner {
             try Task.checkCancellation()
             let end = min(segments.count, start + batchSize)
             let lines = (start..<end).map { (index: $0, speaker: meeting.displayName(for: segments[$0].speaker), text: segments[$0].text) }
-            let input = prompt(lines: lines, notes: notes, vocabulary: ClaudeRunner.vocabularyLine)
+            let input = prompt(lines: lines, notes: notes, vocabulary: ClaudeRunner.vocabularyLine(for: meeting))
             let output = try await ClaudeRunner.runProcess(claudePath, args: args, stdin: input,
                                                            cwd: FileManager.default.temporaryDirectory, timeout: timeout)
             guard output.contains("<<<FIXES>>>") || output.trimmingCharacters(in: .whitespacesAndNewlines) == "NONE" else {

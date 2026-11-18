@@ -5,6 +5,10 @@ struct SettingsView: View {
         TabView {
             GeneralSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }
+            AudioSettings()
+                .tabItem { Label("Audio", systemImage: "waveform") }
+            CalendarSettings()
+                .tabItem { Label("Calendar", systemImage: "calendar") }
             SummarySettings()
                 .tabItem { Label("Summary", systemImage: "sparkles") }
         }
@@ -17,12 +21,68 @@ struct SettingsView: View {
 private struct GeneralSettings: View {
     @Environment(AppState.self) private var state
 
+    @AppStorage(Prefs.Key.notesFolder) private var notesFolder = ""
+
+    var body: some View {
+        Form {
+            LoginItemSettingsSection()
+
+            Section("Files") {
+                LabeledContent("Notes folder") {
+                    HStack {
+                        Text(Prefs.notesFolder.path)
+                            .lineLimit(1).truncationMode(.middle)
+                            .foregroundStyle(.secondary)
+                        Button("Choose…", action: chooseFolder)
+                            .disabled(state.isBusy)
+                    }
+                }
+                if state.isBusy {
+                    Text("You can change the folder once recording, transcript and summary are finished.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            UpdateSettingsSection()
+        }
+        .formStyle(.grouped)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = Prefs.notesFolder
+        if panel.runModal() == .OK, let url = panel.url {
+            state.setNotesFolder(url)
+        }
+    }
+}
+
+// MARK: - Calendar
+
+private struct CalendarSettings: View {
+    var body: some View {
+        Form {
+            CalendarSettingsSection()
+        }
+        .formStyle(.grouped)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+// MARK: - Audio
+
+private struct AudioSettings: View {
+    @Environment(AppState.self) private var state
+
     @AppStorage(Prefs.Key.model) private var model = WhisperModelOption.all[0].id
     @AppStorage(Prefs.Key.language) private var language = TranscriptionLanguage.auto.rawValue
     @AppStorage(Prefs.Key.keepAudio) private var keepAudio = false
     @AppStorage(Prefs.Key.captureSystemAudio) private var captureSystemAudio = true
     @AppStorage(Prefs.Key.autoStopOnCallEnd) private var autoStopOnCallEnd = true
-    @AppStorage(Prefs.Key.notesFolder) private var notesFolder = ""
     @AppStorage(Prefs.Key.micDeviceUID) private var micDeviceUID = ""
     @AppStorage(Prefs.Key.vocabulary) private var vocabulary = ""
     @AppStorage(Prefs.Key.cleanupTranscript) private var cleanupTranscript = true
@@ -30,8 +90,6 @@ private struct GeneralSettings: View {
 
     var body: some View {
         Form {
-            LoginItemSettingsSection()
-
             Section("Transcription") {
                 Picker("Whisper model", selection: $model) {
                     ForEach(WhisperModelOption.all) { option in
@@ -87,38 +145,9 @@ private struct GeneralSettings: View {
                      : "Audio is stored outside your notes folder while recording and deleted after the final transcript.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-
-            Section("Files") {
-                LabeledContent("Notes folder") {
-                    HStack {
-                        Text(Prefs.notesFolder.path)
-                            .lineLimit(1).truncationMode(.middle)
-                            .foregroundStyle(.secondary)
-                        Button("Choose…", action: chooseFolder)
-                            .disabled(state.isBusy)
-                    }
-                }
-                if state.isBusy {
-                    Text("You can change the folder once recording, transcript and summary are finished.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-
-            UpdateSettingsSection()
         }
         .formStyle(.grouped)
         .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.directoryURL = Prefs.notesFolder
-        if panel.runModal() == .OK, let url = panel.url {
-            state.setNotesFolder(url)
-        }
     }
 }
 

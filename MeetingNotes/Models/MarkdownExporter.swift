@@ -10,6 +10,9 @@ enum MarkdownExporter {
         let people = meeting.speakerKeys.map { meeting.displayName(for: $0) }.joined(separator: ", ")
         var lines = ["**Date:** \(f.string(from: meeting.createdAt))", "**Duration:** \(minutes) min"]
         if !people.isEmpty { lines.append("**Speakers:** \(people)") }
+        if let event = meeting.calendarEvent, !event.attendees.isEmpty {
+            lines.append("**Attendees:** \(event.attendees.map(\.name).joined(separator: ", "))")
+        }
         return lines.joined(separator: "  \n")
     }
 

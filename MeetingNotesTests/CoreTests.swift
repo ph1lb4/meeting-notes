@@ -427,3 +427,85 @@ private func seg(_ start: Double, _ end: Double, _ speaker: String, _ text: Stri
         #expect(!UpdateStatus.showsScheduledUpdateNow(immediateFocus: false, busy: false))
     }
 }
+
+@Suite struct CalendarTests {
+    private func event(_ title: String, start: Double, end: Double, link: Bool = false, others: Int = 0,
+                       now: Date) -> CalendarEvent {
+        var attendees = [CalendarAttendee(name: "Me", isMe: true)]
+        for i in 0..<others { attendees.append(CalendarAttendee(name: "Guest \(i)")) }
+        return CalendarEvent(itemID: title, title: title, start: now.addingTimeInterval(start * 60),
+                             end: now.addingTimeInterval(end * 60),
+                             joinURL: link ? URL(string: "https://meet.google.com/abc-defg-hij") : nil,
+                             attendees: attendees)
+    }
+
+    @Test func findsCallLinks() {
+        #expect(MeetingLink.find(in: [nil, "Room 4", "Join: https://us02web.zoom.us/j/123?pwd=x"])?.host == "us02web.zoom.us")
+        #expect(MeetingLink.find(in: ["https://example.com/agenda", "https://teams.microsoft.com/l/meetup-join/abc"])?.host == "teams.microsoft.com")
+        #expect(MeetingLink.find(in: ["https://example.com", "no link here"]) == nil)
+    }
+
+    @Test func currentPrefersCallsAndStartsSoon() {
+        let now = Date()
+        let focus = event("Focus", start: -30, end: 60, now: now)
+        let call = event("Sync", start: 3, end: 30, link: true, now: now)
+        let later = event("Later", start: 20, end: 40, link: true, now: now)
+        #expect(CalendarEvent.current(in: [focus, call, later], at: now)?.title == "Sync")
+        #expect(CalendarEvent.current(in: [focus, later], at: now)?.title == "Focus")
+        #expect(CalendarEvent.current(in: [later], at: now) == nil)
+    }
+
+    @Test func remindersOnlyForCallsInWindow() {
+        let now = Date()
+        let soon = event("Soon", start: 0.5, end: 30, others: 1, now: now)
+        let solo = event("Solo", start: 0.5, end: 30, now: now)
+        let started = event("Started", start: -10, end: 30, link: true, now: now)
+        let due = CalendarEvent.dueReminders(in: [soon, solo, started], at: now, lead: 60)
+        #expect(due.map(\.title) == ["Soon"])
+    }
+
+    @Test func namesOneToOneCallSpeakers() {
+        var m = Meeting(title: "1:1", createdAt: Date(), folderName: "x")
+        m.segments = [seg(0, 1, "me", "Hi"), seg(1, 2, "s1", "Hello")]
+        m.calendarEvent = CalendarEvent(itemID: "a", title: "1:1", start: Date(), end: Date(),
+                                        attendees: [CalendarAttendee(name: "Philipp", isMe: true),
+                                                    CalendarAttendee(name: "Anna")])
+        m.nameSpeakersFromAttendees()
+        #expect(m.displayName(for: "me") == "Philipp")
+        #expect(m.displayName(for: "s1") == "Anna")
+
+        // Two call speakers: unclear who is who, so nothing is guessed.
+        m.speakerNames = [:]
+        m.segments.append(seg(2, 3, "s2", "Hey"))
+        m.nameSpeakersFromAttendees()
+        #expect(m.displayName(for: "s1") == "Speaker 1")
+    }
+
+    @Test func calendarEventSurvivesJSON() throws {
+        var m = Meeting(title: "T", createdAt: Date(timeIntervalSince1970: 0), folderName: "x")
+        m.calendarEvent = CalendarEvent(itemID: "id:1", title: "T", start: Date(timeIntervalSince1970: 0),
+                                        end: Date(timeIntervalSince1970: 60), isRecurring: true,
+                                        attendees: [CalendarAttendee(name: "Anna", email: "anna@example.com")])
+        let back = try JSONDecoder().decode(Meeting.self, from: JSONEncoder().encode(m))
+        #expect(back.calendarEvent == m.calendarEvent)
+        #expect(back.calendarEvent?.calendarURL?.absoluteString == "ical://ekevent/19700101T000000Z/id:1?method=show&options=more")
+        #expect(MarkdownExporter.header(for: back).contains("**Attendees:** Anna"))
+    }
+}
+
+@Suite struct MeetingMailTests {
+    @Test func buildsMailtoWithAllOthers() {
+        let event = CalendarEvent(itemID: "a", title: "Sync", start: Date(), end: Date(), attendees: [
+            CalendarAttendee(name: "Me", email: "me@example.com", isMe: true),
+            CalendarAttendee(name: "Anna", email: "anna@example.com"),
+            CalendarAttendee(name: "Anna again", email: "ANNA@example.com"),
+            CalendarAttendee(name: "Room"),
+            CalendarAttendee(name: "Ben", email: "ben@example.com"),
+        ])
+        #expect(event.otherEmails == ["anna@example.com", "ben@example.com"])
+        let url = CalendarEvent.mailURL(to: event.otherEmails, subject: "Sync & plan", body: "- [ ] **Ben:** 1+1 test")
+        let s = url?.absoluteString ?? ""
+        #expect(s.hasPrefix("mailto:anna@example.com,ben@example.com?subject=Sync%20%26%20plan&body="))
+        #expect(s.contains("1%2B1"))
+    }
+}

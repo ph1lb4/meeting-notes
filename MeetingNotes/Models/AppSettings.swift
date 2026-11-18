@@ -88,6 +88,12 @@ enum Prefs {
         /// After the final pass, let Claude fix misheard words in the transcript.
         static let cleanupTranscript = "cleanupTranscript"
         static let summaryLength = "summaryLength"
+        /// Read the calendar to link recordings to events and their attendees.
+        static let calendarEnabled = "calendarEnabled"
+        /// Show a "join and transcribe" reminder before calendar events with a call link or attendees.
+        static let joinReminder = "joinReminder"
+        /// Minutes before the start that the reminder shows.
+        static let joinReminderLead = "joinReminderLead"
     }
 
     static func registerDefaults() {
@@ -105,6 +111,9 @@ enum Prefs {
             Key.vocabulary: "",
             Key.cleanupTranscript: true,
             Key.summaryLength: SummaryLength.long.rawValue,
+            Key.calendarEnabled: false,
+            Key.joinReminder: true,
+            Key.joinReminderLead: 1,
         ])
     }
 
@@ -125,6 +134,9 @@ enum Prefs {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
+    static var calendarEnabled: Bool { defaults.bool(forKey: Key.calendarEnabled) }
+    static var joinReminder: Bool { defaults.bool(forKey: Key.joinReminder) }
+    static var joinReminderLead: Int { max(0, defaults.integer(forKey: Key.joinReminderLead)) }
     static var micDeviceUID: String { defaults.string(forKey: Key.micDeviceUID) ?? "" }
     static var claudePath: String { defaults.string(forKey: Key.claudePath) ?? "" }
     static var claudeModel: String { defaults.string(forKey: Key.claudeModel) ?? "" }

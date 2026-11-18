@@ -76,10 +76,12 @@ struct Meeting: Codable, Identifiable, Hashable {
     var originalTexts: [String: String] = [:]
     /// Notion / Linear exports, oldest first.
     var exports: [ExportRecord] = []
+    /// Calendar event this meeting belongs to, with its attendees.
+    var calendarEvent: CalendarEvent?
 
     enum CodingKeys: String, CodingKey {
         case id, title, createdAt, duration, phase, segments, notes, speakerNames, folderName
-        case hasSummary, titleEdited, summaryRevision, originalTexts, exports
+        case hasSummary, titleEdited, summaryRevision, originalTexts, exports, calendarEvent
     }
 
     func displayName(for speaker: String) -> String {
@@ -120,6 +122,22 @@ struct Meeting: Codable, Identifiable, Hashable {
             segments[i].speaker = target
         }
         speakerNames[key] = nil
+    }
+
+    /// Names speakers from the calendar where it is safe: in a call with exactly one other attendee
+    /// and exactly one diarized call speaker, that speaker is the attendee and the mic is the user.
+    /// Never overwrites a name the user set.
+    mutating func nameSpeakersFromAttendees() {
+        guard let event = calendarEvent else { return }
+        let keys = speakerKeys
+        let diarized = keys.filter(Self.isDiarizedKey)
+        let others = event.others
+        if keys.contains("me"), let me = event.attendees.first(where: \.isMe), (speakerNames["me"] ?? "").isEmpty {
+            speakerNames["me"] = me.name
+        }
+        if diarized.count == 1, others.count == 1, keys.contains("me"), (speakerNames[diarized[0]] ?? "").isEmpty {
+            speakerNames[diarized[0]] = others[0].name
+        }
     }
 
     /// Transcript entries and notes merged by time.
@@ -184,6 +202,7 @@ extension Meeting {
         summaryRevision = try c.decodeIfPresent(Int.self, forKey: .summaryRevision) ?? 0
         originalTexts = try c.decodeIfPresent([String: String].self, forKey: .originalTexts) ?? [:]
         exports = try c.decodeIfPresent([ExportRecord].self, forKey: .exports) ?? []
+        calendarEvent = try c.decodeIfPresent(CalendarEvent.self, forKey: .calendarEvent)
     }
 }
 

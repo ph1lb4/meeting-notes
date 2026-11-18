@@ -13,6 +13,15 @@ struct MenuBarView: View {
                 state.startRecording()
                 showWindow()
             }
+            if let event = state.calendar.isActive ? state.calendar.currentEvent() : nil {
+                Button("Transcribe \"\(event.title)\"") { state.startRecording(for: event) }
+                if event.joinURL != nil {
+                    Button("Join & Transcribe") {
+                        if let url = event.joinURL { NSWorkspace.shared.open(url) }
+                        state.startRecording(for: event)
+                    }
+                }
+            }
         }
         if !state.finalizing.isEmpty {
             Text("Finishing transcript…")

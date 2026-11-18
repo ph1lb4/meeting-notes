@@ -17,13 +17,17 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.0</string>
+	<string>0.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>4</string>
+	<string>5</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Meeting Notes captures call audio from apps like Zoom, Teams or Meet to transcribe the other participants.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Meeting Notes reads your calendar to name recordings after the meeting, list its attendees and remind you to join and transcribe.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Meeting Notes reads your calendar to name recordings after the meeting, list its attendees and remind you to join and transcribe.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
 	<key>NSMicrophoneUsageDescription</key>

@@ -62,6 +62,9 @@ final class AppState {
 
     /// Elapsed time and levels of the running recording. Read these only in small leaf views.
     @ObservationIgnored let meters = LiveMeters()
+    /// Calendar events and attendees. Observable on its own.
+    @ObservationIgnored let calendar = CalendarService()
+    @ObservationIgnored private var reminder: JoinReminder?
 
     @ObservationIgnored private let engine = TranscriptionEngine()
     @ObservationIgnored private var session: RecordingSession?
@@ -74,6 +77,8 @@ final class AppState {
     @ObservationIgnored private var lastCallSound: Double = -.infinity
     /// True between the Record click and the start of the session (permission prompt).
     @ObservationIgnored private var starting = false
+    /// Calendar event picked for the recording that is starting (from the join reminder).
+    @ObservationIgnored private var startingEvent: CalendarEvent?
 
     // Engine
     /// Serializes all WhisperKit work (model load, live chunks, final passes, unload).
@@ -133,6 +138,11 @@ final class AppState {
         Prefs.registerDefaults()
         prepareModel()
         reload()
+        reminder = JoinReminder(calendar: calendar, isRecording: { [weak self] in self?.isRecording ?? false }) { [weak self] event, join in
+            if join, let url = event.joinURL { NSWorkspace.shared.open(url) }
+            self?.startRecording(for: event)
+        }
+        reminder?.update()
         Task {
             await refreshSummaryEngines()
             await refreshIntegrations()
@@ -287,12 +297,16 @@ final class AppState {
         if isRecording { stopRecording() } else { startRecording() }
     }
 
-    func startRecording() {
+    /// `event` links the recording to that calendar event. Without one, the event running now is used
+    /// when the calendar is on.
+    func startRecording(for event: CalendarEvent? = nil) {
         guard !isRecording, !starting else { return }
         starting = true
+        startingEvent = event
         Task {
             defer {
                 starting = false
+                startingEvent = nil
                 if !isRecording { scheduleIdleUnload() }
             }
             guard await MicCapture.requestPermission() else {
@@ -308,10 +322,20 @@ final class AppState {
         if pendingPrepares == 0, !modelLoaded { prepareModel() }
 
         let now = Date()
-        let f = DateFormatter()
-        f.dateFormat = "EEE HH:mm"
-        let title = "Meeting \(f.string(from: now))"
-        var meeting = Meeting(title: title, createdAt: now, folderName: MeetingStore.makeFolderName(date: now, title: "Meeting"))
+        let event = startingEvent ?? (calendar.isActive ? calendar.currentEvent(at: now) : nil)
+        var meeting: Meeting
+        if let event {
+            meeting = Meeting(title: event.title, createdAt: now,
+                              folderName: MeetingStore.makeFolderName(date: now, title: event.title))
+            meeting.calendarEvent = event
+            // The calendar title is a real title. Claude's summary must not replace it.
+            meeting.titleEdited = true
+        } else {
+            let f = DateFormatter()
+            f.dateFormat = "EEE HH:mm"
+            meeting = Meeting(title: "Meeting \(f.string(from: now))", createdAt: now,
+                              folderName: MeetingStore.makeFolderName(date: now, title: "Meeting"))
+        }
         meeting.phase = .recording
 
         // Audio goes to Application Support, not into the notes folder.
@@ -338,6 +362,7 @@ final class AppState {
         selectedID = meeting.id
         recordingID = meeting.id
         meters.reset()
+        reminder?.close()
         update(meeting)
         flushSave(meeting.id)
 
@@ -454,6 +479,7 @@ final class AppState {
                 // s1, s2, ... are assigned fresh on every pass, so old names could land on the wrong person.
                 m.speakerNames = m.speakerNames.filter { !Meeting.isDiarizedKey($0.key) }
                 m.originalTexts = [:]
+                m.nameSpeakersFromAttendees()
                 if m.duration == 0, let last = segments.last { m.duration = last.end }
                 update(m)
             }
@@ -639,6 +665,35 @@ final class AppState {
 
     func cancelSummary(_ id: UUID) {
         summaryTasks[id]?.cancel()
+    }
+
+    // MARK: - Calendar
+
+    /// Call after the calendar settings change.
+    func calendarSettingsChanged() {
+        calendar.refreshAccess()
+        reminder?.update()
+    }
+
+    /// Turns the calendar on and asks macOS for access. Returns false if access was not given.
+    func enableCalendar() async -> Bool {
+        let granted = calendar.access == .granted ? true : await calendar.requestAccess()
+        Prefs.defaults.set(granted, forKey: Prefs.Key.calendarEnabled)
+        calendarSettingsChanged()
+        return granted
+    }
+
+    /// Links a meeting to a calendar event, or unlinks it with nil. An untouched title becomes the event title.
+    func linkEvent(_ event: CalendarEvent?, to id: UUID) {
+        guard var m = meeting(id) else { return }
+        m.calendarEvent = event
+        if let event {
+            if finalizing[id] == nil, recordingID != id { m.nameSpeakersFromAttendees() }
+            update(m)
+            if !m.titleEdited { setTitle(event.title, for: id) }
+        } else {
+            update(m)
+        }
     }
 
     // MARK: - Export (Notion, Linear)

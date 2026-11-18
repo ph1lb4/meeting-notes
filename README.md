@@ -29,6 +29,7 @@ Meeting bots are awkward, cloud transcription is a privacy question, and most no
 - **Plain files.** Every meeting is a folder with Markdown files. No database, no account, no lock in.
 - **Notion ready.** One click copies clean Markdown with headings, bullets and `- [ ]` to-dos.
 - **Send to Notion or Linear.** If your Claude Code has the Notion or Linear MCP connected, one click files the meeting there: a Notion page, or one Linear issue per action item. Claude tells you where it went.
+- **Calendar.** Turn it on in Settings and a recording takes the title and attendees of the event running now. A reminder pops up before each call: one click joins and starts recording. Pick speakers from the invite and email the summary to everyone in it.
 - **Open at login.** Turn it on in Settings and Meeting Notes starts in the menu bar when you log in to your Mac, with no window in your way.
 
 ## Install
@@ -51,6 +52,7 @@ For summaries, either install and log in to [Claude Code](https://claude.com/cla
 - Recordings are written to `~/Library/Application Support/MeetingNotes/Recordings/`, outside any iCloud synced folder, and deleted after the final transcript unless you turn on "Keep audio".
 - With **Claude** as the summary engine, the transcript and your notes are sent to Anthropic when a summary is written or the transcript is fixed. Pick **Apple Intelligence only** in Settings, or turn off auto summary, to keep everything local.
 - Call capture records all sound your Mac plays. Tell the people in the call that you are recording.
+- The calendar is read on your Mac and only when you turn it on. Attendee names go to Claude with the transcript.
 - The update check asks github.com for the latest version once a day. It sends no data about you or your Mac. You can turn it off in Settings.
 
 ## Where your notes live

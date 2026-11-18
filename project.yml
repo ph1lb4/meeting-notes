@@ -39,11 +39,13 @@ targets:
       properties:
         CFBundleName: Meeting Notes
         CFBundleDisplayName: Meeting Notes
-        CFBundleShortVersionString: "0.2.0"
-        CFBundleVersion: "4"
+        CFBundleShortVersionString: "0.3.0"
+        CFBundleVersion: "5"
         LSApplicationCategoryType: public.app-category.productivity
         NSMicrophoneUsageDescription: Meeting Notes listens to your microphone to transcribe what you say in meetings.
         NSAudioCaptureUsageDescription: Meeting Notes captures call audio from apps like Zoom, Teams or Meet to transcribe the other participants.
+        NSCalendarsFullAccessUsageDescription: Meeting Notes reads your calendar to name recordings after the meeting, list its attendees and remind you to join and transcribe.
+        NSCalendarsUsageDescription: Meeting Notes reads your calendar to name recordings after the meeting, list its attendees and remind you to join and transcribe.
         NSHumanReadableCopyright: ""
         SUFeedURL: https://github.com/ph1lb4/meeting-notes/releases/latest/download/appcast.xml
         SUPublicEDKey: "je5AFFnXEmH7U4dsimoAT/miDE+93kXwK7fmAD42cSI="

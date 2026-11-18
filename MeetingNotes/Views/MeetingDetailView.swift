@@ -46,6 +46,8 @@ struct MeetingDetailView: View {
                 .font(.title2.weight(.semibold))
                 .onSubmit { state.setTitle(title, for: meetingID) }
 
+            CalendarEventBar(meeting: meeting)
+
             HStack(spacing: 12) {
                 statusLine(meeting)
                 Spacer()
@@ -175,6 +177,14 @@ struct SummaryPage: View {
                             exportTarget = target
                         }
                         .disabled(busy || state.exporting[meeting.id] != nil)
+                    }
+                }
+            }
+            if let text, !summarizing, let event = meeting.calendarEvent, !event.otherEmails.isEmpty {
+                PageActionButton(title: "Email", systemImage: "envelope",
+                                 help: "Write an email with the summary to everyone in the invite") {
+                    if let url = CalendarEvent.mailURL(to: event.otherEmails, subject: meeting.title, body: text) {
+                        NSWorkspace.shared.open(url)
                     }
                 }
             }

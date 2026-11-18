@@ -12,6 +12,7 @@
 		09D695F3C49D42A466B41303 /* Meeting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9859880B54F8C9FC3952B668 /* Meeting.swift */; };
 		13DC5E00C0128A17F12CE385 /* CallEndTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4817A325B8B1A3B8238E02E /* CallEndTracker.swift */; };
 		14E225C74E47CD92D94EFC56 /* AppleSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 606AF966F9688C1A4666C59A /* AppleSummarizer.swift */; };
+		1A368C79D54A6E37FF923600 /* CalendarEventBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1237B81AE00ACC7B30560CE3 /* CalendarEventBar.swift */; };
 		1A8D770BC2E2695C5A610AAA /* ClaudeExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68587700A7A3E826204D60FB /* ClaudeExporter.swift */; };
 		1C8CA8590601E9A0C5C09740 /* CoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E156D09F0345A1D74A7332A /* CoreTests.swift */; };
 		230509E06E85C3056478EEF4 /* AppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 191207878B16B0307BCCA584 /* AppUpdater.swift */; };
@@ -39,12 +40,15 @@
 		838F4E1A5022CA6D672AB3C7 /* TranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7222084F25845EEF5C2D15F3 /* TranscriptView.swift */; };
 		859BE4C472A0E091563C5597 /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D44602F57E880C284B87D8F /* MarkdownView.swift */; };
 		860D439C207B028F9B566B32 /* AppleSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 606AF966F9688C1A4666C59A /* AppleSummarizer.swift */; };
+		89DD06BDC21B4158B7AEAAB1 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C67E18BF93079311CEE08B5E /* CalendarService.swift */; };
 		8A4190ADC91A474B3545280F /* HallucinationFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1D7E1CF237E1F73C85C899 /* HallucinationFilter.swift */; };
 		8DFBD0C2769C58947BEA7FE0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 8E5B1152A2D78E9E835F5B53 /* WhisperKit */; };
 		8FC00E3D30B0163A701E0220 /* MicCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC249A2E89E61737D39090D /* MicCapture.swift */; };
 		90277F4A856C9947DE47F5A2 /* MarkdownExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1295159789C1C47711C365A /* MarkdownExporter.swift */; };
 		93EE84E8549935A422EFB479 /* TranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 531E442AC4E44537FDA3C106 /* TranscriptionEngine.swift */; };
+		9A40E4D6531C109DFDF8C0A4 /* CalendarSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5851AEB9BA9BAD308ACC6E8 /* CalendarSettingsSection.swift */; };
 		9AF5598BF5B1E4C0DF2BD3A4 /* HallucinationFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1D7E1CF237E1F73C85C899 /* HallucinationFilter.swift */; };
+		9B8E6670661C048B11F32407 /* CalendarEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54031CD110E22DB70D7A47FE /* CalendarEvent.swift */; };
 		9C02CE36719E9B2608A56502 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A833CD4B7F0A1C10D272139D /* Sparkle */; };
 		9CD36AA8FE9E225E4941CA9C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3748910ECA730A352C0F996A /* Assets.xcassets */; };
 		9CF2D51E4840AA02BE4FBF36 /* TranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 531E442AC4E44537FDA3C106 /* TranscriptionEngine.swift */; };
@@ -52,6 +56,8 @@
 		AD9E7F20FEDC3BC40D68E856 /* ClaudeExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68587700A7A3E826204D60FB /* ClaudeExporter.swift */; };
 		B0C1A24BF036B152FEF82363 /* AudioConverter16k.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F1EFD8780FBC10DAA16BAB /* AudioConverter16k.swift */; };
 		C1CF4F9B0197642A1CDD2218 /* MeetingNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8746CB170C91245362E136D8 /* MeetingNotesApp.swift */; };
+		C405623D4E4036B6F86649FD /* CalendarEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54031CD110E22DB70D7A47FE /* CalendarEvent.swift */; };
+		E5EEE075D8F8A8BC5F51C134 /* JoinReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 302F27D0E809249ED9E76697 /* JoinReminder.swift */; };
 		EBF5DCE7A99177DD4C597090 /* MicUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6F0444BA3B2E1A04E61B76 /* MicUsage.swift */; };
 		EEB597FDC653CC1947012E40 /* ClaudeRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3D12F871F7E95F59383A1EA /* ClaudeRunner.swift */; };
 		F746EF87F4212978A06BA133 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D68238B4558FD2E24BA5A9 /* SettingsView.swift */; };
@@ -61,15 +67,18 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		1237B81AE00ACC7B30560CE3 /* CalendarEventBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventBar.swift; sourceTree = "<group>"; };
 		191207878B16B0307BCCA584 /* AppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdater.swift; sourceTree = "<group>"; };
 		19333912E0E00B0658B27D66 /* AudioInputDevices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioInputDevices.swift; sourceTree = "<group>"; };
 		1D44602F57E880C284B87D8F /* MarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownView.swift; sourceTree = "<group>"; };
 		27D1D982E2E690C066BAF4F0 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		302F27D0E809249ED9E76697 /* JoinReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinReminder.swift; sourceTree = "<group>"; };
 		3748910ECA730A352C0F996A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3E156D09F0345A1D74A7332A /* CoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreTests.swift; sourceTree = "<group>"; };
 		4F98B33980F230C656BA0FBE /* MeetingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingStore.swift; sourceTree = "<group>"; };
 		50930861FBB246B639E7DC46 /* TrackRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackRecorder.swift; sourceTree = "<group>"; };
 		531E442AC4E44537FDA3C106 /* TranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionEngine.swift; sourceTree = "<group>"; };
+		54031CD110E22DB70D7A47FE /* CalendarEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEvent.swift; sourceTree = "<group>"; };
 		5EC249A2E89E61737D39090D /* MicCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicCapture.swift; sourceTree = "<group>"; };
 		606AF966F9688C1A4666C59A /* AppleSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSummarizer.swift; sourceTree = "<group>"; };
 		66FD79000678ECEF46E7E3CD /* LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItem.swift; sourceTree = "<group>"; };
@@ -94,6 +103,8 @@
 		BC1D7E1CF237E1F73C85C899 /* HallucinationFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HallucinationFilter.swift; sourceTree = "<group>"; };
 		BC3197BB9BDA55D33870AB6B /* UpdateStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateStatus.swift; sourceTree = "<group>"; };
 		C679D9E0794F3439A2F4B7A7 /* LoginItemSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemSettingsSection.swift; sourceTree = "<group>"; };
+		C67E18BF93079311CEE08B5E /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
+		D5851AEB9BA9BAD308ACC6E8 /* CalendarSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSettingsSection.swift; sourceTree = "<group>"; };
 		D630E58E6CA5D17340D49CA1 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		DA6F0444BA3B2E1A04E61B76 /* MicUsage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicUsage.swift; sourceTree = "<group>"; };
 		E0F285F2937607F8ABA6971D /* TranscriptCleaner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptCleaner.swift; sourceTree = "<group>"; };
@@ -127,6 +138,8 @@
 		3EB1134E07979BCF0DCEB3F3 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				1237B81AE00ACC7B30560CE3 /* CalendarEventBar.swift */,
+				D5851AEB9BA9BAD308ACC6E8 /* CalendarSettingsSection.swift */,
 				C679D9E0794F3439A2F4B7A7 /* LoginItemSettingsSection.swift */,
 				D630E58E6CA5D17340D49CA1 /* MainView.swift */,
 				1D44602F57E880C284B87D8F /* MarkdownView.swift */,
@@ -158,6 +171,7 @@
 				8746CB170C91245362E136D8 /* MeetingNotesApp.swift */,
 				994036493DB24F0DC9A61B58 /* SelfTest.swift */,
 				F4FCFEE6F28F5CA5E5230536 /* Audio */,
+				FDD89497BE9D9A3A6888E443 /* Calendar */,
 				73DEBB5F27F834A72B4E1259 /* Claude */,
 				699D7E6927850598C5ED86CB /* Models */,
 				F90AFFEBBA7EDD19AAD28623 /* Transcription */,
@@ -179,6 +193,7 @@
 			isa = PBXGroup;
 			children = (
 				7F051896FEE40E7238CF042D /* AppSettings.swift */,
+				54031CD110E22DB70D7A47FE /* CalendarEvent.swift */,
 				B4817A325B8B1A3B8238E02E /* CallEndTracker.swift */,
 				B1295159789C1C47711C365A /* MarkdownExporter.swift */,
 				9859880B54F8C9FC3952B668 /* Meeting.swift */,
@@ -238,6 +253,15 @@
 				531E442AC4E44537FDA3C106 /* TranscriptionEngine.swift */,
 			);
 			path = Transcription;
+			sourceTree = "<group>";
+		};
+		FDD89497BE9D9A3A6888E443 /* Calendar */ = {
+			isa = PBXGroup;
+			children = (
+				C67E18BF93079311CEE08B5E /* CalendarService.swift */,
+				302F27D0E809249ED9E76697 /* JoinReminder.swift */,
+			);
+			path = Calendar;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -350,10 +374,15 @@
 				860D439C207B028F9B566B32 /* AppleSummarizer.swift in Sources */,
 				B0C1A24BF036B152FEF82363 /* AudioConverter16k.swift in Sources */,
 				08AB162C6F3E337DE1A422CE /* AudioInputDevices.swift in Sources */,
+				C405623D4E4036B6F86649FD /* CalendarEvent.swift in Sources */,
+				1A368C79D54A6E37FF923600 /* CalendarEventBar.swift in Sources */,
+				89DD06BDC21B4158B7AEAAB1 /* CalendarService.swift in Sources */,
+				9A40E4D6531C109DFDF8C0A4 /* CalendarSettingsSection.swift in Sources */,
 				3B82264E0AB185F5833788A7 /* CallEndTracker.swift in Sources */,
 				1A8D770BC2E2695C5A610AAA /* ClaudeExporter.swift in Sources */,
 				2921314FAF7A4D075C533624 /* ClaudeRunner.swift in Sources */,
 				9AF5598BF5B1E4C0DF2BD3A4 /* HallucinationFilter.swift in Sources */,
+				E5EEE075D8F8A8BC5F51C134 /* JoinReminder.swift in Sources */,
 				26E37CEC6621DCA56E552F68 /* LoginItem.swift in Sources */,
 				249798EE9E69A0505AAB3D93 /* LoginItemSettingsSection.swift in Sources */,
 				38537A09824E50CF55647B18 /* MainView.swift in Sources */,
@@ -385,6 +414,7 @@
 			files = (
 				F7BF34A39BB2979F3172F4BB /* AppSettings.swift in Sources */,
 				14E225C74E47CD92D94EFC56 /* AppleSummarizer.swift in Sources */,
+				9B8E6670661C048B11F32407 /* CalendarEvent.swift in Sources */,
 				13DC5E00C0128A17F12CE385 /* CallEndTracker.swift in Sources */,
 				AD9E7F20FEDC3BC40D68E856 /* ClaudeExporter.swift in Sources */,
 				EEB597FDC653CC1947012E40 /* ClaudeRunner.swift in Sources */,

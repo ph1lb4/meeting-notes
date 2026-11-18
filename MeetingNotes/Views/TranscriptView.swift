@@ -40,7 +40,6 @@ struct TranscriptView: View {
                         .padding(.trailing, 20)
                     }
                 }
-                Divider()
             }
             if entries.isEmpty {
                 VStack(spacing: 8) {
@@ -172,8 +171,15 @@ struct SpeakerChip: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Name for \(meeting.displayName(for: key))").font(.headline)
                 TextField("e.g. Anna", text: $name)
-                    .frame(width: 220)
+                    .frame(width: 260)
                     .onSubmit(save)
+                if let attendees = meeting.calendarEvent?.attendees, !attendees.isEmpty {
+                    Text("From the invite").font(.caption).foregroundStyle(.secondary)
+                    AttendeePicker(attendees: attendees, taken: Set(meeting.speakerNames.filter { $0.key != key }.values)) { picked in
+                        name = picked
+                        save()
+                    }
+                }
                 HStack {
                     let others = meeting.speakerKeys.filter { $0 != key }
                     if canMerge && !others.isEmpty {
@@ -202,5 +208,37 @@ struct SpeakerChip: View {
     private func merge(into other: String) {
         editing = false
         state.mergeSpeaker(key, into: other, in: meeting.id)
+    }
+}
+
+/// One click names a speaker after an attendee. Names already given to another speaker are dimmed.
+private struct AttendeePicker: View {
+    let attendees: [CalendarAttendee]
+    let taken: Set<String>
+    let pick: (String) -> Void
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), alignment: .leading)], alignment: .leading, spacing: 6) {
+                ForEach(attendees, id: \.self) { a in
+                    Button { pick(a.name) } label: {
+                        Text(a.isMe ? "\(a.name) (you)" : a.name)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.quaternary.opacity(0.6), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(taken.contains(a.name) ? 0.45 : 1)
+                    .help(a.email ?? a.name)
+                }
+            }
+        }
+        .font(.caption)
+        .frame(width: 260)
+        .frame(maxHeight: 150)
+        .fixedSize(horizontal: false, vertical: attendees.count <= 10)
     }
 }

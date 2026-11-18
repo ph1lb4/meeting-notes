@@ -54,6 +54,8 @@ struct MainView: View {
                 RecordButton()
             }
         }
+        // No separator line under the title bar.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .alert("Something went wrong", isPresented: Binding(get: { state.errorMessage != nil }, set: { if !$0 { state.errorMessage = nil } })) {
             Button("OK") { state.errorMessage = nil }
         } message: {

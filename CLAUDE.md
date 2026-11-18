@@ -13,7 +13,7 @@ xcodegen generate                      # after adding/removing files or changing
 xcodebuild -project MeetingNotes.xcodeproj -scheme MeetingNotes -configuration Debug -derivedDataPath build build
 ```
 
-Unit tests (Swift Testing, `MeetingNotesTests/`) cover the pure logic: hallucination filter, Claude output parsing, echo removal, speaker relabeling, call detection, call end detection, language lock, transcript cleanup parsing, meeting JSON and Markdown export. The test bundle has no host app. It compiles `Models/`, `Claude/` and `Transcription/` directly, so code in those folders must not depend on `AppState` or views.
+Unit tests (Swift Testing, `MeetingNotesTests/`) cover the pure logic: hallucination filter, Claude output parsing, echo removal, speaker relabeling, call detection, call end detection, language lock, transcript cleanup parsing, meeting JSON and Markdown export, calendar event picking, call links and attendee speaker names. The test bundle has no host app. It compiles `Models/`, `Claude/` and `Transcription/` directly, so code in those folders must not depend on `AppState` or views.
 
 ```sh
 xcodebuild -project MeetingNotes.xcodeproj -scheme MeetingNotes -derivedDataPath build test
@@ -69,4 +69,6 @@ Signing is manual (`Apple Development`, team in `project.yml`), hardened runtime
 
 **Login item:** `LoginItem` wraps `SMAppService.mainApp` ("Open Meeting Notes at login" in Settings, off by default). macOS holds the state, so there is no `Prefs` key. When macOS starts the app as a login item, `AppDelegate` closes the main window with no animation, so the app starts in the menu bar only. The login flag (`LoginItem.startedAtLogin`) is only readable in `applicationDidFinishLaunching`.
 
-**Permissions:** `NSMicrophoneUsageDescription` and `NSAudioCaptureUsageDescription` are set in `project.yml` (`info.properties`), not directly in `Info.plist`.
+**Calendar:** `CalendarService` (`Calendar/`) is the only type that imports EventKit. It reads nothing unless `Prefs.calendarEnabled` is on and full access is granted (`isActive`). Events are copied into the pure `CalendarEvent` (`Models/`), stored as `Meeting.calendarEvent`, so they stay readable without access. `startRecording(for:)` links the given event, else `CalendarEvent.current` (running now or starting within 5 min, calls before focus blocks). A linked event sets the title and `titleEdited`, so Claude does not rename it. Attendees go into the Markdown header, the summary prompt and the cleanup vocabulary. `Meeting.nameSpeakersFromAttendees` names speakers only in the safe 1:1 case (one other attendee, one diarized call speaker) and never overwrites a name. `JoinReminder` checks every 15 s and shows a floating `NSPanel` `Prefs.joinReminderLead` minutes before events with a call link or other attendees ("Join & Transcribe"). `CalendarEvent.calendarURL` opens the event in Calendar.app (`ical://ekevent/…`).
+
+**Permissions:** `NSMicrophoneUsageDescription`, `NSAudioCaptureUsageDescription` and the calendar usage descriptions are set in `project.yml` (`info.properties`), not directly in `Info.plist`. Hardened runtime needs `com.apple.security.personal-information.calendars` in the entitlements.
