@@ -66,6 +66,9 @@ targets:
       - path: MeetingNotes/Models
       - path: MeetingNotes/Claude
       - path: MeetingNotes/Transcription
+      # The parts of the audio code that need no hardware.
+      - path: MeetingNotes/Audio/TrackRecorder.swift
+      - path: MeetingNotes/Audio/AudioConverter16k.swift
     dependencies:
       - package: ArgmaxOSS
         product: WhisperKit

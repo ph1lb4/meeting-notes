@@ -75,6 +75,9 @@ final class AppState {
     @ObservationIgnored private var lastCallCheck: Double = 0
     /// Session time of the last loud call audio frame.
     @ObservationIgnored private var lastCallSound: Double = -.infinity
+    /// The capture warning shown last, so it shows once per failure.
+    @ObservationIgnored private var captureProblem: String?
+    @ObservationIgnored private var silentCall = SilentCallCheck()
     /// True between the Record click and the start of the session (permission prompt).
     @ObservationIgnored private var starting = false
     /// Calendar event picked for the recording that is starting (from the join reminder).
@@ -143,6 +146,17 @@ final class AppState {
             self?.startRecording(for: event)
         }
         reminder?.update()
+        // Capture stops during sleep, and the session clock keeps running. Without this a lid
+        // closed mid-recording adds hours of silence to both tracks on wake.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.isRecording else { return }
+                self.stopRecording()
+                self.warningMessage = "The recording was stopped because the Mac went to sleep."
+            }
+        }
         Task {
             await refreshSummaryEngines()
             await refreshIntegrations()
@@ -353,7 +367,9 @@ final class AppState {
             return
         }
         if let err = session.systemAudioError {
-            warningMessage = "Call audio is not captured (\(err)). Only your microphone is recorded."
+            warningMessage = session.systemTrack == nil
+                ? "Call audio is not captured (\(err)). Only your microphone is recorded."
+                : "Call audio is not captured yet (\(err)). Meeting Notes keeps trying. Your microphone is recorded."
         }
 
         self.session = session
@@ -386,6 +402,8 @@ final class AppState {
         }
 
         callEndTracker = CallEndTracker()
+        captureProblem = nil
+        silentCall = SilentCallCheck()
         lastCallCheck = 0
         lastCallSound = -.infinity
         let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
@@ -393,11 +411,21 @@ final class AppState {
             MainActor.assumeIsolated {
                 guard let self, let s = self.session else { return }
                 self.meters.set(elapsed: s.duration, mic: s.micLevel, system: s.systemLevel)
+                self.checkCapture(s)
                 self.checkCallEnded(s)
             }
         }
         RunLoop.main.add(timer, forMode: .common)
         meterTimer = timer
+    }
+
+    /// Warns once when a track died and does not come back, and again if it happens a second time.
+    private func checkCapture(_ s: RecordingSession) {
+        s.checkStalls()
+        let problem = s.captureProblem
+        guard problem != captureProblem else { return }
+        captureProblem = problem
+        if let problem { warningMessage = problem }
     }
 
     /// Stops the recording once the call app released the mic and the call is quiet (see `CallEndTracker`).
@@ -406,8 +434,13 @@ final class AppState {
         if s.systemLevel > 0.004 { lastCallSound = now }
         guard now - lastCallCheck >= 1 else { return }
         lastCallCheck = now
+        let otherAppUsesMic = MicUsage.otherAppIsUsingMic()
+        if let heard = s.callAudioHeard,
+           silentCall.update(otherAppUsesMic: otherAppUsesMic, callAudioHeard: heard, at: now) {
+            warningMessage = "No call audio has arrived so far. If others are talking, allow Meeting Notes under System Settings > Privacy & Security > Screen & System Audio Recording."
+        }
         guard Prefs.autoStopOnCallEnd else { return }
-        let ended = callEndTracker.update(otherAppUsesMic: MicUsage.otherAppIsUsingMic(),
+        let ended = callEndTracker.update(otherAppUsesMic: otherAppUsesMic,
                                           callAudioActive: now - lastCallSound < 2,
                                           at: now)
         if ended { stopRecording() }
@@ -442,7 +475,7 @@ final class AppState {
         flushSave(id)
 
         startFinalPass(id, input: .init(micURL: session.micURL,
-                                        systemURL: session.systemTrack == nil ? nil : session.systemURL))
+                                        systemURL: session.hasSystemAudio ? session.systemURL : nil))
     }
 
     // MARK: - Final pass

@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreAudio
+import os
 
 /// Captures everything the Mac plays (Zoom, Teams, Meet in the browser, ...) with a
 /// Core Audio process tap. Needs macOS 14.4+ and the "System Audio Recording" permission,
@@ -26,6 +27,10 @@ final class SystemAudioCapture {
     private let converter = AudioConverter16k()
     private var running = false
     private var rebuildScheduled = false
+    private let backoff = RestartBackoff()
+    private let failures = OSAllocatedUnfairLock(initialState: 0)
+    /// Failed rebuilds in a row since call audio last worked. Read from any thread.
+    var failedRestarts: Int { failures.withLock { $0 } }
     private var deviceListener: AudioObjectPropertyListenerBlock?
     /// Bluetooth headsets (AirPods) drop to a lower sample rate when a call app opens their mic.
     /// The default output device stays the same, so we also watch the format the IO proc was built with.
@@ -49,11 +54,30 @@ final class SystemAudioCapture {
                                    mElement: kAudioObjectPropertyElementMain)
     }
 
+    /// Throws if call audio could not be set up. Capture then keeps trying in the background,
+    /// like after a failed rebuild, so call `stop()` in both cases.
     func start() throws {
         try controlQueue.sync {
-            try build()
             running = true
             addDeviceListener()
+            do {
+                try build()
+            } catch {
+                teardown()
+                failures.withLock { $0 = 1 }
+                scheduleRebuild(after: backoff.delay(afterFailures: 1))
+                throw error
+            }
+        }
+    }
+
+    /// Rebuilds a tap that runs but delivers no audio. Nothing is posted then, so the caller
+    /// watches the track (`StallWatchdog`).
+    func kick() {
+        controlQueue.async { [weak self] in
+            guard let self, self.running, !self.rebuildScheduled else { return }
+            NSLog("System audio capture delivers no audio, rebuilding")
+            self.scheduleRebuild(after: 0)
         }
     }
 
@@ -209,19 +233,29 @@ final class SystemAudioCapture {
     }
 
     /// Both default output properties usually change together, so coalesce them into one rebuild.
-    private func scheduleRebuild() {
+    /// A failed rebuild is tried again until it works: the new device may not be ready yet, and
+    /// no further change notification is guaranteed to come.
+    private func scheduleRebuild(after delay: Double = 0.3) {
         guard running, !rebuildScheduled else { return }
         rebuildScheduled = true
-        controlQueue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        controlQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self else { return }
             self.rebuildScheduled = false
             guard self.running else { return }
             self.teardown()
             do {
                 try self.build()
-                NSLog("System audio capture rebuilt after output device or format change")
+                self.failures.withLock { $0 = 0 }
+                NSLog("System audio capture rebuilt")
             } catch {
-                NSLog("Rebuilding system audio capture failed: \(error)")
+                self.teardown()
+                let failed = self.failures.withLock { count -> Int in
+                    count += 1
+                    return count
+                }
+                let delay = self.backoff.delay(afterFailures: failed)
+                NSLog("Rebuilding system audio capture failed (\(failed)), next try in \(delay) s: \(error)")
+                self.scheduleRebuild(after: delay)
             }
         }
     }
@@ -229,9 +263,9 @@ final class SystemAudioCapture {
     private static func defaultOutputDeviceUID() throws -> String {
         var deviceID = AudioObjectID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultSystemOutputDevice,
-                                                 mScope: kAudioObjectPropertyScopeGlobal,
-                                                 mElement: kAudioObjectPropertyElementMain)
+        // The device apps play on, not the one for alerts (DefaultSystemOutputDevice). It clocks the
+        // aggregate device, and the two differ when sound effects go to another output.
+        var address = Self.address(kAudioHardwarePropertyDefaultOutputDevice)
         var status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
         guard status == noErr else { throw CaptureError.coreAudio("Reading default output device", status) }
 

@@ -214,7 +214,8 @@ final class TranscriptionEngine: @unchecked Sendable {
     }
 
     private func finalPass(_ whisper: WhisperKit, _ input: FinalInput, status: @escaping @Sendable (String) -> Void) async throws -> [TranscriptSegment] {
-        let systemPath = input.systemURL.map(\.path).flatMap { FileManager.default.fileExists(atPath: $0) ? $0 : nil }
+        // An empty call file (call audio never started, or the app quit before it did) counts as none.
+        let systemPath = input.systemURL.flatMap { Self.duration(of: $0) > 0 ? $0.path : nil }
 
         // Decide call vs in-person from the system track, then drop it until it is needed.
         var hasCall = false
