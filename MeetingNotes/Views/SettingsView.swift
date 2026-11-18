@@ -174,7 +174,7 @@ private struct SummarySettings: View {
     @AppStorage(Prefs.Key.autoSummarize) private var autoSummarize = true
     @AppStorage(Prefs.Key.summaryLength) private var summaryLength = SummaryLength.long.rawValue
     @AppStorage(Prefs.Key.claudePath) private var claudePath = ""
-    @AppStorage(Prefs.Key.claudeModel) private var claudeModel = ""
+    @AppStorage(Prefs.Key.claudeModel) private var claudeModel = Prefs.defaultClaudeModel
 
     @State private var checking = false
     @State private var checkingIntegrations = false
@@ -252,7 +252,7 @@ private struct SummarySettings: View {
                 TextField("Model", text: $claudeModel, prompt: Text("CLI default"))
                     .labelsHidden().frame(width: 200)
             }
-            Text("Leave empty for your Claude Code default, or enter e.g. sonnet or opus.")
+            Text("Used for summary, transcript fixes and export. Default is \(Prefs.defaultClaudeModel). Enter e.g. sonnet for faster results, or leave empty for your Claude Code default.")
                 .font(.caption).foregroundStyle(.secondary)
             LabeledContent("Custom path") {
                 TextField("Custom path", text: $claudePath, prompt: Text("Auto-detect"))

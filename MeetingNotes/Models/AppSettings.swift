@@ -103,7 +103,7 @@ enum Prefs {
             Key.keepAudio: false,
             Key.autoSummarize: true,
             Key.claudePath: "",
-            Key.claudeModel: "",
+            Key.claudeModel: defaultClaudeModel,
             Key.captureSystemAudio: true,
             Key.summaryEngine: SummaryEngineChoice.auto.rawValue,
             Key.micDeviceUID: "",
@@ -139,7 +139,9 @@ enum Prefs {
     static var joinReminderLead: Int { max(0, defaults.integer(forKey: Key.joinReminderLead)) }
     static var micDeviceUID: String { defaults.string(forKey: Key.micDeviceUID) ?? "" }
     static var claudePath: String { defaults.string(forKey: Key.claudePath) ?? "" }
-    static var claudeModel: String { defaults.string(forKey: Key.claudeModel) ?? "" }
+    /// Model for summary, cleanup and export. An empty setting means the Claude Code default.
+    static let defaultClaudeModel = "claude-opus-5-5"
+    static var claudeModel: String { defaults.string(forKey: Key.claudeModel) ?? defaultClaudeModel }
     static var summaryLength: SummaryLength {
         SummaryLength(rawValue: defaults.string(forKey: Key.summaryLength) ?? "") ?? .long
     }

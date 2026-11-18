@@ -27,7 +27,7 @@ final class TranscriptionEngine: @unchecked Sendable {
         // Use an earlier download without touching the network.
         if FileManager.default.fileExists(atPath: localFolder.appendingPathComponent("config.json").path) {
             do {
-                whisper = try await load(folder: localFolder)
+                whisper = try await load(folder: localFolder, prewarm: false)
                 loadedModel = model
                 progress(1)
                 return
@@ -39,16 +39,18 @@ final class TranscriptionEngine: @unchecked Sendable {
         let folder = try await WhisperKit.download(variant: model, downloadBase: base) { p in
             progress(p.fractionCompleted)
         }
-        whisper = try await load(folder: folder)
+        whisper = try await load(folder: folder, prewarm: true)
         loadedModel = model
     }
 
-    private func load(folder: URL) async throws -> WhisperKit {
+    /// Prewarm loads every model twice to keep peak memory low while Core ML compiles it for this Mac.
+    /// That is only needed right after a download. Later loads use the compiled cache, so prewarm would just double the load time.
+    private func load(folder: URL, prewarm: Bool) async throws -> WhisperKit {
         let config = WhisperKitConfig(
             modelFolder: folder.path,
             verbose: false,
             logLevel: .error,
-            prewarm: true,
+            prewarm: prewarm,
             load: true,
             download: false
         )

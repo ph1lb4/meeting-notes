@@ -86,28 +86,47 @@ enum TranscriptCleaner {
         return (out, originals)
     }
 
-    /// Runs Claude over the transcript in batches. Lines Claude did not return stay as they are.
+    /// Claude calls that run at the same time.
+    static let maxParallel = 4
+
+    /// Runs Claude over the transcript in batches, up to `maxParallel` at once.
+    /// Lines Claude did not return stay as they are. One failed batch fails the run and stops the others.
     static func run(for meeting: Meeting, claudePath: String, timeout: TimeInterval = ClaudeRunner.defaultTimeout) async throws -> [Int: String] {
         let segments = meeting.segments
         let notes = meeting.notes.isEmpty ? "" : MarkdownExporter.notes(for: meeting)
+        let vocabulary = ClaudeRunner.vocabularyLine(for: meeting)
         let args = ClaudeRunner.baseArgs(systemPrompt: systemPrompt)
-        var fixes: [Int: String] = [:]
-        var start = 0
-        while start < segments.count {
-            try Task.checkCancellation()
-            let end = min(segments.count, start + batchSize)
-            let lines = (start..<end).map { (index: $0, speaker: meeting.displayName(for: segments[$0].speaker), text: segments[$0].text) }
-            let input = prompt(lines: lines, notes: notes, vocabulary: ClaudeRunner.vocabularyLine(for: meeting))
-            let output = try await ClaudeRunner.runProcess(claudePath, args: args, stdin: input,
-                                                           cwd: FileManager.default.temporaryDirectory, timeout: timeout)
-            guard output.contains("<<<FIXES>>>") || output.trimmingCharacters(in: .whitespacesAndNewlines) == "NONE" else {
-                let head = String(output.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
-                throw ClaudeRunner.RunError.failed("Claude returned an unexpected answer: \(head.isEmpty ? "(empty)" : head)")
-            }
-            // Only accept numbers from this batch.
-            for (i, text) in parse(output) where i >= start && i < end { fixes[i] = text }
-            start = end
+        let batches: [(range: Range<Int>, input: String)] = stride(from: 0, to: segments.count, by: batchSize).map { start in
+            let range = start..<min(segments.count, start + batchSize)
+            let lines = range.map { (index: $0, speaker: meeting.displayName(for: segments[$0].speaker), text: segments[$0].text) }
+            return (range, prompt(lines: lines, notes: notes, vocabulary: vocabulary))
         }
-        return fixes
+
+        return try await withThrowingTaskGroup(of: [Int: String].self) { group in
+            var fixes: [Int: String] = [:]
+            var next = 0
+            func addNext() {
+                guard next < batches.count else { return }
+                let batch = batches[next]
+                next += 1
+                group.addTask {
+                    try Task.checkCancellation()
+                    let output = try await ClaudeRunner.runProcess(claudePath, args: args, stdin: batch.input,
+                                                                   cwd: FileManager.default.temporaryDirectory, timeout: timeout)
+                    guard output.contains("<<<FIXES>>>") || output.trimmingCharacters(in: .whitespacesAndNewlines) == "NONE" else {
+                        let head = String(output.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+                        throw ClaudeRunner.RunError.failed("Claude returned an unexpected answer: \(head.isEmpty ? "(empty)" : head)")
+                    }
+                    // Only accept numbers from this batch.
+                    return parse(output).filter { batch.range.contains($0.key) }
+                }
+            }
+            for _ in 0..<maxParallel { addNext() }
+            while let part = try await group.next() {
+                fixes.merge(part) { _, new in new }
+                addNext()
+            }
+            return fixes
+        }
     }
 }
