@@ -5,7 +5,7 @@ import AudioToolbox
 /// later in the final pass (`removeEcho`), not here.
 /// Restarts itself when the audio configuration changes (AirPods connect, input device switch).
 final class MicCapture {
-    private let engine = AVAudioEngine()
+    private var engine = AVAudioEngine()
     private let converter = AudioConverter16k()
     private let queue = DispatchQueue(label: "MicCapture")
     private var stopped = true
@@ -17,7 +17,13 @@ final class MicCapture {
 
     enum MicError: LocalizedError {
         case noInput
-        var errorDescription: String? { "No microphone input available. Check the input device in System Settings > Sound." }
+        case deviceSwitching
+        var errorDescription: String? {
+            switch self {
+            case .noInput: "No microphone input available. Check the input device in System Settings > Sound."
+            case .deviceSwitching: "The microphone is switching. Try again in a moment."
+            }
+        }
     }
 
     static func requestPermission() async -> Bool {
@@ -34,10 +40,12 @@ final class MicCapture {
             stopped = false
         }
         configObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
-        ) { [weak self] _ in
+            forName: .AVAudioEngineConfigurationChange, object: nil, queue: nil
+        ) { [weak self] note in
             guard let self else { return }
+            let source = note.object as AnyObject?
             self.queue.async {
+                guard source === self.engine else { return }
                 self.generation += 1
                 self.restart(attempt: 0, generation: self.generation)
             }
@@ -62,6 +70,11 @@ final class MicCapture {
         selectDevice(on: input)
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw MicError.noInput }
+        // installTap raises an Objective-C exception (not catchable in Swift) when the format does not match the hardware.
+        let hardware = input.inputFormat(forBus: 0)
+        guard format.sampleRate == hardware.sampleRate, format.channelCount == hardware.channelCount else {
+            throw MicError.deviceSwitching
+        }
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
             guard let self else { return }
             let samples = self.converter.convert(buffer)
@@ -88,10 +101,12 @@ final class MicCapture {
     }
 
     /// Runs on `queue`. The format can be invalid for a moment while the device switches, so retry.
+    /// A new engine each time, because an engine keeps the old device format after a switch.
     private func restart(attempt: Int, generation: Int) {
         guard !stopped, generation == self.generation else { return }
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
+        engine = AVAudioEngine()
         do {
             try startEngine()
             NSLog("Mic restarted after audio configuration change")
